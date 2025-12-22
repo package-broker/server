@@ -1,0 +1,30 @@
+{
+  "name": "@package-broker/cli",
+  "version": "0.1.0",
+  "description": "CLI tool to initialize Cloudflare Composer Proxy configuration",
+  "type": "module",
+  "bin": {
+    "package-broker": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@package-broker/main": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
