@@ -1,0 +1,60 @@
+# Cloudflare Composer Proxy - Example wrangler.toml
+# Copy this file to wrangler.toml and fill in your values
+
+name = "composer-proxy"
+main = "packages/main/src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Generate with: openssl rand -base64 32
+ENCRYPTION_KEY = "REPLACE_WITH_YOUR_32_BYTE_KEY_BASE64"
+
+# Optional: Set to restrict admin API access
+# ADMIN_TOKEN = "your-admin-token"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "composer-proxy-db"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+
+# KV Namespace for caching
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# R2 Bucket for artifacts
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "composer-proxy-artifacts"
+
+# Queue for async operations
+[[queues.producers]]
+binding = "QUEUE"
+queue = "composer-proxy-queue"
+
+[[queues.consumers]]
+queue = "composer-proxy-queue"
+max_batch_size = 10
+max_batch_timeout = 30
+
+# Analytics Engine (OPTIONAL - free tier: 100k events/day)
+# Analytics Engine datasets are automatically created on first write.
+# To enable Analytics Engine:
+# 1. Uncomment the lines below
+# 2. Deploy: npx wrangler deploy
+# 3. The dataset will be created automatically when first event is written
+#
+# [[analytics_engine_datasets]]
+# binding = "ANALYTICS"
+# dataset = "composer-proxy-analytics"
+
+# Optional: Use S3 instead of R2
+# [vars]
+# S3_ENDPOINT = "https://s3.amazonaws.com"
+# S3_REGION = "us-east-1"
+# S3_ACCESS_KEY_ID = "your-access-key"
+# S3_SECRET_ACCESS_KEY = "your-secret-key"
+# S3_BUCKET = "your-bucket-name"
+

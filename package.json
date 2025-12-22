@@ -1,0 +1,34 @@
+{
+  "name": "@package-broker/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight, self-hosted Composer proxy running on Cloudflare Workers",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/shared && npm run build -w packages/core && npm run build -w packages/ui && npm run build -w packages/main && npm run build -w packages/cli",
+    "dev": "cd packages/ui && npm run build && cd ../.. && npx wrangler dev --local --port 8787",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:mocked": "TEST_MODE=mocked playwright test --project=mocked",
+    "test:e2e:integration": "TEST_MODE=integration playwright test --project=integration",
+    "test:e2e:remote": "SKIP_WEBSERVER=1 playwright test",
+    "test:e2e:remote:mocked": "SKIP_WEBSERVER=1 playwright test --project=mocked",
+    "test:e2e:remote:headed": "SKIP_WEBSERVER=1 playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
