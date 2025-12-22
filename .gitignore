@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.turbo/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+wrangler.toml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+test-results/
+playwright-report/
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Lock files (when not using npm)
+yarn.lock
+pnpm-lock.yaml
+
+# Drizzle
+packages/core/drizzle/
+
+# Temporary files
+*.log
+*.tmp
