@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/cli",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "CLI tool to initialize Cloudflare Composer Proxy configuration",
   "type": "module",
   "bin": {
