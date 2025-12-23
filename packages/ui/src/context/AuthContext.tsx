@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const [user, setUser] = useState<User | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (adminToken) {
@@ -43,7 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('Failed to fetch user');
         })
         .then(data => setUser(data.user))
-        .catch(() => {
+        .catch((err) => {
+          console.error('AuthContext: Failed to fetch user', err);
+          setAuthError(err.message || 'Unknown auth error');
           // If token is invalid, logout
           logout();
         });
@@ -55,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (token: string) => {
     setAdminToken(token);
     localStorage.setItem(STORAGE_KEY, token);
+    setAuthError(null);
   };
 
   const logout = () => {
@@ -67,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ adminToken, isAuthenticated, user, isAdmin, login, logout }}>
+    <AuthContext.Provider value={{ adminToken, isAuthenticated, user, isAdmin, login, logout, authError } as any}>
       {children}
     </AuthContext.Provider>
   );

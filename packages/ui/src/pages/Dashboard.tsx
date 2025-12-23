@@ -32,8 +32,9 @@ export function Dashboard() {
   ];
 
   if (error) {
+    console.error('Dashboard Error:', error);
     return (
-      <div className="card p-6">
+      <div className="card p-6" data-testid="dashboard-error">
         <p className="text-red-400">Error loading stats: {(error as Error).message}</p>
       </div>
     );

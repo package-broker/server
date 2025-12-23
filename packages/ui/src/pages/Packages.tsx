@@ -83,13 +83,12 @@ export function Packages() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Only fetch if search is at least 3 chars
-  const shouldFetch = search.length >= 3;
+  /* const shouldFetch = search.length >= 3; */
 
   const { data: packages = [], isLoading } = useQuery({
     queryKey: ['packages', search],
     queryFn: () => getPackages(search || undefined),
-    enabled: shouldFetch,
+    // enabled: shouldFetch,
   });
 
   // Group packages by name
@@ -117,7 +116,7 @@ export function Packages() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search packages (min 3 chars)..."
+              placeholder="Search packages..."
               className="input w-full"
               data-testid="package-search-input"
               aria-label="Search packages"
@@ -137,11 +136,7 @@ export function Packages() {
 
       {/* Packages List */}
       <div className="space-y-4" data-testid="packages-list">
-        {!shouldFetch ? (
-          <div className="card p-8 text-center text-slate-400" data-testid="packages-instruction">
-            Type at least 3 letters to see matching packages.
-          </div>
-        ) : isLoading ? (
+        {isLoading ? (
           <div className="card p-8 text-center" data-testid="packages-loading">
             <div className="w-8 h-8 border-2 border-slate-600 border-t-primary-500 rounded-full animate-spin mx-auto" aria-label="Loading packages" />
           </div>

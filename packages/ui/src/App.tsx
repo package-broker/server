@@ -41,7 +41,7 @@ function AppContent() {
 
   // Fresh Install Flow
   if (setupRequired) {
-    return <Setup onSuccess={() => window.location.reload()} />;
+    return <Setup onSuccess={() => setSetupRequired(false)} />;
   }
 
   // Invite Flow
@@ -55,7 +55,7 @@ function AppContent() {
 
   // Show login page if auth is required and not authenticated
   if (authRequired && !isAuthenticated) {
-    return <Login onSuccess={() => window.location.reload()} />;
+    return <Login onSuccess={() => { }} />;
   }
 
   const navItems = [

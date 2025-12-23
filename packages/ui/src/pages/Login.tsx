@@ -7,7 +7,7 @@ interface LoginProps {
 }
 
 export default function Login({ onSuccess }: LoginProps) {
-  const { login } = useAuth();
+  const { login, authError } = useAuth() as any;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -65,6 +65,16 @@ export default function Login({ onSuccess }: LoginProps) {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5" data-testid="login-form">
+            {authError && (
+              <div
+                role="alert"
+                aria-live="polite"
+                data-testid="auth-context-error"
+                className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 text-red-400 text-sm mb-4"
+              >
+                Auth Error: {authError}
+              </div>
+            )}
             {error && (
               <div
                 role="alert"

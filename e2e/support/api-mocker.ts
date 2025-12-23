@@ -16,6 +16,7 @@ export class ApiMocker {
     await this.mockPackages();
     await this.mockRepositories();
     await this.mockTokens();
+    await this.mockSettings();
   }
 
   async mockAuth(): Promise<void> {
@@ -53,7 +54,7 @@ export class ApiMocker {
   async mockStats(stats = mockStats): Promise<void> {
     if (!this.active) return;
 
-    await this.page.route(/\/api\/stats$/, (route) => {
+    await this.page.route('**/api/stats', (route) => {
       route.fulfill({ json: stats });
     });
   }
@@ -61,19 +62,35 @@ export class ApiMocker {
   async mockPackages(packages = mockPackages): Promise<void> {
     if (!this.active) return;
 
-    await this.page.route(/\/api\/packages/, (route) => route.fulfill({ json: packages }));
+    await this.page.route('**/api/packages*', (route) => {
+      const url = new URL(route.request().url());
+      const search = url.searchParams.get('search');
+
+      if (search) {
+        const filtered = packages.filter((p) => p.name.includes(search));
+        route.fulfill({ json: filtered });
+      } else {
+        route.fulfill({ json: packages });
+      }
+    });
   }
 
   async mockRepositories(repos = mockRepositories): Promise<void> {
     if (!this.active) return;
 
-    await this.page.route(/\/api\/repositories/, (route) => route.fulfill({ json: repos }));
+    await this.page.route('**/api/repositories*', (route) => route.fulfill({ json: repos }));
   }
 
   async mockTokens(tokens = mockTokens): Promise<void> {
     if (!this.active) return;
 
     await this.page.route('**/api/tokens*', (route) => route.fulfill({ json: tokens }));
+  }
+
+  async mockSettings(settings = { kv_available: true, packagist_mirroring_enabled: false }): Promise<void> {
+    if (!this.active) return;
+
+    await this.page.route('**/api/settings', (route) => route.fulfill({ json: settings }));
   }
 
   async mockDownloadSuccess(): Promise<void> {
