@@ -10,7 +10,32 @@ export function Tokens() {
   const queryClient = useQueryClient();
   const { isAdmin } = useAuth();
 
-  // ... (lines 11-37 unchanged)
+  const { data: tokens = [], isLoading: tokensLoading } = useQuery({
+    queryKey: ['tokens'],
+    queryFn: getTokens,
+  });
+
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+  });
+
+  const kvAvailable = settings?.kv_available ?? false;
+  const isLoading = tokensLoading || settingsLoading;
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { description?: string; rate_limit_max?: number | null } }) => updateToken(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tokens'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteToken,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tokens'] });
+    },
+  });
 
   return (
     <div className="space-y-8" data-testid="tokens-page">
@@ -112,6 +137,19 @@ function TokenRow({
   kvAvailable: boolean;
   isAdmin: boolean;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [description, setDescription] = useState(token.description);
+
+  const handleSave = () => {
+    onUpdate({ description });
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setDescription(token.description);
+    setIsEditing(false);
+  };
+
   // ... (lines 155-183 unchanged)
 
   return (
