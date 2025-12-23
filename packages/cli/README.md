@@ -1,12 +1,12 @@
-# Package Broker CLI
+# PACKAGE.broker CLI
 
-CLI tool to initialize Package Broker configuration in your project.
+CLI tool to initialize PACKAGE.broker configuration in your project.
 
 ## Usage
 
 ```bash
 npm install @package-broker/cli @package-broker/main
-npx package-broker init
+npx package-broker
 ```
 
 This command will:
@@ -26,4 +26,4 @@ After running the init command, follow the displayed instructions to:
 
 ## Documentation
 
-For full documentation, visit: https://github.com/package-broker/server
+For full documentation, visit: https://package.broker/docs/

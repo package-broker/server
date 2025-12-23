@@ -1,6 +1,6 @@
 # E2E Tests
 
-End-to-end tests for the Package Broker using Playwright.
+End-to-end tests for PACKAGE.broker using Playwright.
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ Test against your deployed environment:
 
 ```bash
 # Set environment variables
-export TEST_BASE_URL=https://composer-proxy.lukasz-bajsarowicz.workers.dev
+export TEST_BASE_URL=https://package-broker.lukasz-bajsarowicz.workers.dev
 export TEST_ADMIN_EMAIL=admin@example.com
 export TEST_ADMIN_PASSWORD=your-password
 
@@ -31,7 +31,7 @@ This runs integration tests only - no mocked tests when testing remote deploymen
 
 2. Edit `.env.test` with your credentials:
    ```bash
-   TEST_BASE_URL=https://composer-proxy.lukasz-bajsarowicz.workers.dev
+   TEST_BASE_URL=https://package-broker.lukasz-bajsarowicz.workers.dev
    TEST_ADMIN_EMAIL=admin@example.com
    TEST_ADMIN_PASSWORD=your-secure-password
    ```
@@ -90,13 +90,13 @@ TEST_BASE_URL=https://your-domain.com npm run test:e2e:remote
 
 ```bash
 # Test against production
-TEST_BASE_URL=https://composer-proxy.lukasz-bajsarowicz.workers.dev \
+TEST_BASE_URL=https://package-broker.lukasz-bajsarowicz.workers.dev \
 TEST_ADMIN_EMAIL=admin@example.com \
 TEST_ADMIN_PASSWORD=SecurePass123 \
 npm run test:e2e:remote
 
 # Test against staging
-TEST_BASE_URL=https://composer-proxy-staging.example.com \
+TEST_BASE_URL=https://package-broker-staging.example.com \
 TEST_ADMIN_EMAIL=admin@example.com \
 TEST_ADMIN_PASSWORD=SecurePass123 \
 npm run test:e2e:remote

@@ -115,7 +115,7 @@ export class UserService {
     }
 
     async generateTwoFactorQrCode(email: string, secret: string) {
-        const otpauth = (await import('otplib')).authenticator.keyuri(email, 'Cloudflare Composer Proxy', secret);
+        const otpauth = (await import('otplib')).authenticator.keyuri(email, 'PACKAGE.broker', secret);
         return (await import('qrcode')).toDataURL(otpauth);
     }
 

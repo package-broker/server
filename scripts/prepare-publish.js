@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /*
- * Package Broker - Prepare Packages for Publishing
+ * PACKAGE.broker - Prepare Packages for Publishing
  * Copyright (C) 2025 Łukasz Bajsarowicz
  * Licensed under AGPL-3.0
  *
@@ -86,10 +86,10 @@ function updatePackageJson(packagePath) {
   }
 
   writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
-  console.log(`✅ Updated ${packagePath}/package.json for publishing`);
+  console.log(`Updated ${packagePath}/package.json for publishing`);
 }
 
 // Update all packages
 packages.forEach(updatePackageJson);
-console.log('\n✅ All packages prepared for publishing');
+console.log('\nAll packages prepared for publishing');
 

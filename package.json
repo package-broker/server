@@ -2,14 +2,14 @@
   "name": "@package-broker/server",
   "version": "0.2.12",
   "private": true,
-  "description": "Package Broker - A lightweight, self-hosted Composer proxy running on Cloudflare Workers",
+  "description": "PACKAGE.broker - Minimalistic, SOC-2 Compatible Composer Mirror (Cloudflare Workers)",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "build": "npm run build -w packages/shared && npm run build -w packages/core && npm run build -w packages/ui && npm run build -w packages/main && npm run build -w packages/cli && npm run build -w packages/adapter-node",
     "dev": "cd packages/ui && npm run build && cd ../.. && npx wrangler dev -c wrangler.dev.toml --local --port 8787",
-    "db:migrate": "npx wrangler d1 execute composer-proxy-db --local --file=./packages/main/migrations/0001_initial.sql -c wrangler.dev.toml",
+    "db:migrate": "npx wrangler d1 execute package-broker-db --local --file=./packages/main/migrations/0001_initial.sql -c wrangler.dev.toml",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
