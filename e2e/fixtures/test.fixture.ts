@@ -27,11 +27,12 @@ interface TestFixtures {
 export const test = base.extend<TestFixtures & TestOptions>({
   // Default test mode from project config
   testMode: [
-    (async ({}, use, testInfo) => {
+    (async ({ }, use, testInfo) => {
       const mode = (testInfo.project?.use as any)?.testMode || 'mocked';
+      console.log(`TestFixture: Resolved testMode using testInfo: ${mode}`);
       await use(mode as TestMode);
     },
-    { option: true }),
+      { option: true }),
   ],
 
   // Mode helpers
@@ -44,6 +45,7 @@ export const test = base.extend<TestFixtures & TestOptions>({
 
   // API Mocker (only active in mocked mode)
   apiMocker: async ({ page, testMode }, use) => {
+    console.log(`TestFixture: Initializing ApiMocker with testMode=${testMode}`);
     const mocker = new ApiMocker(page, testMode === 'mocked');
     await use(mocker);
   },
