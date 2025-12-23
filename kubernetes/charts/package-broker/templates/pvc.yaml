@@ -1,0 +1,17 @@
+{{- if .Values.persistence.enabled -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "package-broker.fullname" . }}-data
+  labels:
+    {{- include "package-broker.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+  {{- if not (eq .Values.persistence.storageClass "-") }}
+  storageClassName: "{{ .Values.persistence.storageClass }}"
+  {{- end }}
+{{- end -}}
