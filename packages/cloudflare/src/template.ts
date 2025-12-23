@@ -162,6 +162,20 @@ export function renderTemplate(
     `bucket_name = "${variables.worker_name}-artifacts"`
   );
 
+  // Add assets configuration for UI if not present
+  if (!template.includes('[assets]')) {
+    // Insert after compatibility_flags line
+    const assetsConfig = `# Static Assets (UI)
+[assets]
+directory = "node_modules/@package-broker/ui/dist"
+binding = "ASSETS"
+`;
+    template = template.replace(
+      /(compatibility_flags\s*=\s*\[[^\]]+\])/,
+      `$1\n\n${assetsConfig}`
+    );
+  }
+
   return template;
 }
 

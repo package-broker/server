@@ -331,6 +331,40 @@ async function main() {
     process.exit(1);
   }
 
+  // Check if UI needs to be built
+  log('\n🎨 Checking UI assets...', 'blue');
+  const uiPackagePath = join(
+    targetDir,
+    'node_modules',
+    '@package-broker',
+    'ui'
+  );
+  const uiDistPath = join(uiPackagePath, 'dist');
+  
+  if (!existsSync(uiDistPath)) {
+    log('⚠️  UI assets not found. Attempting to build UI...', 'yellow');
+    try {
+      const { execa } = await import('execa');
+      // Check if UI package exists
+      if (existsSync(uiPackagePath)) {
+        await execa('npm', ['run', 'build'], {
+          cwd: uiPackagePath,
+          stdio: 'pipe',
+        });
+        log('✓ UI built successfully', 'green');
+      } else {
+        log('⚠️  UI package not found. UI will not be available.', 'yellow');
+        log('   Install @package-broker/ui or build UI manually.', 'yellow');
+      }
+    } catch (error) {
+      log('⚠️  Failed to build UI. UI will not be available.', 'yellow');
+      log('   You can build it manually: cd node_modules/@package-broker/ui && npm run build', 'yellow');
+      log('   Or install @package-broker/ui which includes pre-built assets.', 'yellow');
+    }
+  } else {
+    log('✓ UI assets found', 'green');
+  }
+
   // Deploy confirmation
   log('\n🚀 Deployment\n', 'bright');
   const deployResponse = await prompts({
