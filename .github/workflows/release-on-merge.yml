@@ -1,0 +1,115 @@
+name: Release on Merge
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      # Ignore AI-only documentation files
+      - '**/MIGRATION_AUDIT.md'
+      - '**/implementation_plan.md'
+      - '**/AUDIT.md'
+      - '**/BUGS.md'
+      - '**/MARKETING.md'
+      - '**/OPEN_SOURCE_MIGRATION.md'
+      - '**/FIXTURE.md'
+      - '**/GOLIVE.md'
+      - '**/GOLIVE_TRACKING.md'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  calculate-version:
+    name: Calculate Next Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calculate.outputs.version }}
+      should-release: ${{ steps.calculate.outputs.should-release }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for version calculation
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Calculate next version
+        id: calculate
+        run: |
+          NEXT_VERSION=$(node scripts/calculate-version.js)
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "Calculated next version: $NEXT_VERSION"
+          
+          if [ "$NEXT_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "should-release=true" >> $GITHUB_OUTPUT
+            echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Version bump detected: $CURRENT_VERSION → $NEXT_VERSION"
+          else
+            echo "should-release=false" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "ℹ️ No version bump needed (only non-versioned commits)"
+          fi
+
+  update-versions-and-release:
+    name: Update Versions and Release
+    needs: calculate-version
+    if: needs.calculate-version.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update all package versions
+        run: |
+          VERSION="${{ needs.calculate-version.outputs.version }}"
+          node scripts/update-versions.js "$VERSION"
+
+      - name: Commit version updates
+        run: |
+          git add packages/*/package.json package.json
+          git commit -m "chore(release): bump version to ${{ needs.calculate-version.outputs.version }}"
+          git push origin main
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.calculate-version.outputs.version }}"
+          TAG="v$VERSION"
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "✅ Created and pushed tag: $TAG"
+
+      - name: Trigger release workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // The tag push will automatically trigger the release.yml workflow
+            console.log('Tag pushed, release workflow will be triggered automatically');
+
