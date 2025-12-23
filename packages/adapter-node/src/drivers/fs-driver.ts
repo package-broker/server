@@ -41,7 +41,7 @@ export class FileSystemDriver implements StorageDriver {
             const writeStream = createWriteStream(filePath);
             await pipeline(nodeStream, writeStream);
         } else {
-            await fs.writeFile(filePath, Buffer.from(data));
+            await fs.writeFile(filePath, Buffer.from(data as any));
         }
     }
 

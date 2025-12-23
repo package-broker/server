@@ -1,4 +1,4 @@
-```
+
 // Core package exports
 
 export * from './db';
@@ -15,4 +15,5 @@ export * from './workflows';
 export * from './services/UserService';
 export * from './services/EmailService';
 export * from './ports';
+export * from './factory';
 
