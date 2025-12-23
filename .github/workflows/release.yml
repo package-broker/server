@@ -265,46 +265,54 @@ jobs:
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -z "$PREV_TAG" ]; then
-            echo "notes=## What's Changed
-
-          Initial release of PACKAGE.broker
-
-          ## Installation
-
-          ### NPM Packages
-          Install from GitHub Packages:
-          \`\`\`bash
-          npm install @package-broker/core --registry https://npm.pkg.github.com
-          \`\`\`
-
-          ### Docker Image
-          \`\`\`bash
-          docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
-          \`\`\`
-
-          ## Packages Published
-          - @package-broker/shared
-          - @package-broker/core
-          - @package-broker/ui
-          - @package-broker/main
-          - @package-broker/cli
-          - @package-broker/node-server" >> $GITHUB_OUTPUT
+            {
+              echo "notes<<EOF"
+              echo "## What's Changed"
+              echo ""
+              echo "Initial release of PACKAGE.broker"
+              echo ""
+              echo "## Installation"
+              echo ""
+              echo "### NPM Packages"
+              echo "Install from GitHub Packages:"
+              echo "\`\`\`bash"
+              echo "npm install @package-broker/core --registry https://npm.pkg.github.com"
+              echo "\`\`\`"
+              echo ""
+              echo "### Docker Image"
+              echo "\`\`\`bash"
+              echo "docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}"
+              echo "\`\`\`"
+              echo ""
+              echo "## Packages Published"
+              echo "- @package-broker/shared"
+              echo "- @package-broker/core"
+              echo "- @package-broker/ui"
+              echo "- @package-broker/main"
+              echo "- @package-broker/cli"
+              echo "- @package-broker/node-server"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "notes=## What's Changed
-
-          See full changelog: https://github.com/package-broker/server/compare/$PREV_TAG...${{ steps.version.outputs.tag }}
-
-          ## Installation
-
-          ### NPM Packages
-          \`\`\`bash
-          npm install @package-broker/core@${{ steps.version.outputs.tag }} --registry https://npm.pkg.github.com
-          \`\`\`
-
-          ### Docker Image
-          \`\`\`bash
-          docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
-          \`\`\`" >> $GITHUB_OUTPUT
+            {
+              echo "notes<<EOF"
+              echo "## What's Changed"
+              echo ""
+              echo "See full changelog: https://github.com/package-broker/server/compare/$PREV_TAG...${{ steps.version.outputs.tag }}"
+              echo ""
+              echo "## Installation"
+              echo ""
+              echo "### NPM Packages"
+              echo "\`\`\`bash"
+              echo "npm install @package-broker/core@${{ steps.version.outputs.tag }} --registry https://npm.pkg.github.com"
+              echo "\`\`\`"
+              echo ""
+              echo "### Docker Image"
+              echo "\`\`\`bash"
+              echo "docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}"
+              echo "\`\`\`"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create GitHub Release
