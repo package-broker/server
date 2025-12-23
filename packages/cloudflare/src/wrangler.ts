@@ -349,9 +349,17 @@ export async function applyMigrations(
   const { stdout, stderr } = await execWrangler(args, { env, cwd });
 
   if (stderr && !stderr.includes('Applied') && !stdout.includes('Applied')) {
-    // Check if migrations were already applied
-    if (!stderr.includes('already applied') && !stdout.includes('already applied')) {
+    // Check if migrations were already applied or if it's a duplicate column error (safe to ignore)
+    const isAlreadyApplied = stderr.includes('already applied') || stdout.includes('already applied');
+    const isDuplicateColumn = stderr.includes('duplicate column') || stdout.includes('duplicate column');
+    
+    if (!isAlreadyApplied && !isDuplicateColumn) {
       throw new Error(`Failed to apply migrations: ${stderr || stdout}`);
+    }
+    
+    // Log warning for duplicate column (migration conflict, but safe)
+    if (isDuplicateColumn) {
+      console.warn('⚠️  Some migrations may have already been applied (duplicate column detected). This is safe to ignore.');
     }
   }
 }
