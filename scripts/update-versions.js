@@ -28,7 +28,7 @@ function updatePackageVersion(packagePath, newVersion) {
     'utf8'
   );
   
-  console.log(`✅ Updated ${path.relative(rootDir, packageJsonPath)}: ${oldVersion} → ${newVersion}`);
+  console.log(`Updated ${path.relative(rootDir, packageJsonPath)}: ${oldVersion} -> ${newVersion}`);
   return true;
 }
 
@@ -50,7 +50,7 @@ function updateAllVersions(newVersion) {
     }
   }
   
-  console.log(`\n✅ Updated ${updatedCount + 1} package.json files`);
+  console.log(`\nUpdated ${updatedCount + 1} package.json files`);
 }
 
 // Main execution

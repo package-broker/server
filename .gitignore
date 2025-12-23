@@ -39,3 +39,6 @@ packages/core/drizzle/
 # Temporary files
 *.log
 *.tmp
+
+# Local npm cache (used by CI/sandbox workarounds)
+.npm-cache/

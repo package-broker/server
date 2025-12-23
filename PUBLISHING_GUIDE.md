@@ -1,6 +1,6 @@
 # Publishing Setup Guide
 
-> **📖 For release instructions, see [RELEASE_GUIDE.md](./RELEASE_GUIDE.md)**
+> For release instructions, see [RELEASE_GUIDE.md](./RELEASE_GUIDE.md)
 
 This guide provides technical details about the publishing setup for **GitHub Packages** (`npm.pkg.github.com`) under the `@package-broker` scope.
 

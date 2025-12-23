@@ -1,7 +1,7 @@
 {
   "name": "@package-broker/cli",
   "version": "0.2.12",
-  "description": "CLI tool to initialize Package Broker configuration",
+  "description": "CLI tool to initialize PACKAGE.broker configuration",
   "type": "module",
   "bin": {
     "package-broker": "./dist/index.js"

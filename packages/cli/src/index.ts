@@ -29,7 +29,7 @@ function log(message: string, color: keyof typeof COLORS = 'reset') {
 function main() {
   const targetDir = process.cwd();
 
-  log('\n🚀 Initializing PACKAGE.broker...\n', 'bright');
+  log('\nInitializing PACKAGE.broker...\n', 'bright');
 
   // Find the main package in node_modules
   const mainPackagePath = join(
@@ -40,7 +40,7 @@ function main() {
   );
 
   if (!existsSync(mainPackagePath)) {
-    log('❌ Error: @package-broker/main not found in node_modules', 'red');
+    log('Error: @package-broker/main not found in node_modules', 'red');
     log('   Please run: npm install @package-broker/main', 'yellow');
     process.exit(1);
   }
@@ -48,15 +48,15 @@ function main() {
   // Check if wrangler.toml already exists
   const wranglerPath = join(targetDir, 'wrangler.toml');
   if (existsSync(wranglerPath)) {
-    log('⚠️  wrangler.toml already exists. Skipping...', 'yellow');
+    log('wrangler.toml already exists. Skipping.', 'yellow');
   } else {
     // Copy wrangler.example.toml
     const exampleTomlPath = join(mainPackagePath, 'wrangler.example.toml');
     try {
       copyFileSync(exampleTomlPath, wranglerPath);
-      log('✅ Created wrangler.toml', 'green');
+      log('Created wrangler.toml', 'green');
     } catch (error) {
-      log(`❌ Error copying wrangler.toml: ${(error as Error).message}`, 'red');
+      log(`Error copying wrangler.toml: ${(error as Error).message}`, 'red');
       process.exit(1);
     }
   }
@@ -64,7 +64,7 @@ function main() {
   // Check if migrations directory exists
   const migrationsDir = join(targetDir, 'migrations');
   if (existsSync(migrationsDir)) {
-    log('⚠️  migrations/ directory already exists. Skipping...', 'yellow');
+    log('migrations/ directory already exists. Skipping.', 'yellow');
   } else {
     // Copy migrations
     try {
@@ -75,14 +75,14 @@ function main() {
       for (const file of migrationFiles) {
         copyFileSync(join(sourceMigrationsDir, file), join(migrationsDir, file));
       }
-      log(`✅ Copied ${migrationFiles.length} migration files`, 'green');
+      log(`Copied ${migrationFiles.length} migration files`, 'green');
     } catch (error) {
-      log(`❌ Error copying migrations: ${(error as Error).message}`, 'red');
+      log(`Error copying migrations: ${(error as Error).message}`, 'red');
       process.exit(1);
     }
   }
 
-  log('\n📝 Next steps:', 'bright');
+  log('\nNext steps:', 'bright');
   log('');
   log('1. Edit wrangler.toml with your configuration', 'blue');
   log('   - Set your worker name', 'blue');
@@ -104,7 +104,7 @@ function main() {
   log('6. Deploy to Cloudflare:', 'blue');
   log('   npx wrangler deploy', 'blue');
   log('');
-  log('📚 Documentation: https://github.com/package-broker/server', 'bright');
+  log('Documentation: https://package.broker/docs/', 'bright');
   log('');
 }
 

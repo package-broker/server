@@ -1,6 +1,6 @@
 # Contributing to PACKAGE.broker
 
-Thank you for your interest in contributing to Package Broker! We welcome contributions from the community to help make this project better.
+Thank you for your interest in contributing to PACKAGE.broker. We welcome contributions from the community to help make the project better.
 
 ## getting Started
 
@@ -8,7 +8,7 @@ Thank you for your interest in contributing to Package Broker! We welcome contri
 2.  **Clone your fork** locally:
     ```bash
     git clone https://github.com/your-username/server.git
-    cd cloudflare-composer-proxy
+    cd package-broker
     ```
 3.  **Install dependencies**:
     ```bash
@@ -16,8 +16,8 @@ Thank you for your interest in contributing to Package Broker! We welcome contri
     ```
 4.  **Set up your environment**:
     - Copy `.dev.vars.example` to `.dev.vars` (if available) or set up your `wrangler.toml` vars.
-    - Create a local D1 database: `npx wrangler d1 create composer-proxy-db`.
-    - Apply migrations: `npx wrangler d1 migrations apply composer-proxy-db --local`.
+    - Create a local D1 database: `npx wrangler d1 create package-broker-db`.
+    - Apply migrations: `npx wrangler d1 migrations apply package-broker-db --local`.
 
 ## Development Workflow
 

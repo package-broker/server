@@ -1,4 +1,4 @@
-name = "composer-proxy"
+name = "package-broker"
 main = "packages/main/src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -10,7 +10,7 @@ LOG_LEVEL = "debug"
 # D1 Database
 [[d1_databases]]
 binding = "DB"
-database_name = "composer-proxy-db"
+database_name = "package-broker-db"
 database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 # KV Namespace for caching
@@ -26,14 +26,14 @@ binding = "ASSETS"
 # R2 Bucket for artifacts
 [[r2_buckets]]
 binding = "R2_BUCKET"
-bucket_name = "composer-proxy-artifacts"
+bucket_name = "package-broker-artifacts"
 
 # Queue for async operations
 [[queues.producers]]
 binding = "QUEUE"
-queue = "composer-proxy-queue"
+queue = "package-broker-queue"
 
 [[queues.consumers]]
-queue = "composer-proxy-queue"
+queue = "package-broker-queue"
 max_batch_size = 10
 max_batch_timeout = 30
