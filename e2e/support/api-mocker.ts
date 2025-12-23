@@ -38,11 +38,13 @@ export class ApiMocker {
     await this.page.route('**/api/auth/me', (route) => {
       route.fulfill({
         json: {
-          id: 'test-admin-id',
-          email: testConfig.credentials.email,
-          role: 'admin',
-          status: 'active',
-          created_at: Date.now()
+          user: {
+            id: 'test-admin-id',
+            email: testConfig.credentials.email,
+            role: 'admin',
+            status: 'active',
+            created_at: Date.now()
+          }
         }
       });
     });
@@ -51,19 +53,21 @@ export class ApiMocker {
   async mockStats(stats = mockStats): Promise<void> {
     if (!this.active) return;
 
-    await this.page.route('**/api/stats', (route) => route.fulfill({ json: stats }));
+    await this.page.route(/\/api\/stats$/, (route) => {
+      route.fulfill({ json: stats });
+    });
   }
 
   async mockPackages(packages = mockPackages): Promise<void> {
     if (!this.active) return;
 
-    await this.page.route('**/api/packages*', (route) => route.fulfill({ json: packages }));
+    await this.page.route(/\/api\/packages/, (route) => route.fulfill({ json: packages }));
   }
 
   async mockRepositories(repos = mockRepositories): Promise<void> {
     if (!this.active) return;
 
-    await this.page.route('**/api/repositories*', (route) => route.fulfill({ json: repos }));
+    await this.page.route(/\/api\/repositories/, (route) => route.fulfill({ json: repos }));
   }
 
   async mockTokens(tokens = mockTokens): Promise<void> {

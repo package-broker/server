@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures/test.fixture';
 
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ loginPage, dashboardPage, apiMocker, page }) => {
-    await apiMocker.mockAll();
+    // apiMocker.mockAll() is already called in the fixture
     await loginPage.goto();
     await page.waitForLoadState('networkidle');
     await loginPage.loginAsAdmin();

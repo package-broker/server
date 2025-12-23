@@ -38,8 +38,10 @@ export const test = base.extend<TestFixtures & TestOptions>({
 
   // API Mocker (only active in mocked mode)
   apiMocker: async ({ page, testMode }, use) => {
-    console.log(`TestFixture: Initializing ApiMocker with testMode=${testMode}`);
     const mocker = new ApiMocker(page, testMode === 'mocked');
+    if (testMode === 'mocked') {
+      await mocker.mockAll();
+    }
     await use(mocker);
   },
 

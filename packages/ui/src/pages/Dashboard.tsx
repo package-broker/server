@@ -93,19 +93,19 @@ export function Dashboard() {
               <p className="mb-3">
                 Configure your project to use this proxy:
               </p>
-              
+
               {/* CLI Command Option */}
               <div className="mb-4" data-testid="composer-cli-config">
                 <p className="text-sm text-slate-400 mb-2">Using Composer CLI:</p>
                 <pre className="bg-slate-950 rounded-lg p-4 overflow-x-auto text-sm text-slate-300">
                   <code data-testid="composer-cli-command">composer config repositories.proxy composer {window.location.origin}</code>
                 </pre>
-      </div>
+              </div>
 
               {/* JSON Option */}
               <div data-testid="composer-json-config">
                 <p className="text-sm text-slate-400 mb-2">Or manually edit composer.json:</p>
-        <pre className="bg-slate-950 rounded-lg p-4 overflow-x-auto text-sm text-slate-300">
+                <pre className="bg-slate-950 rounded-lg p-4 overflow-x-auto text-sm text-slate-300">
                   <code data-testid="composer-json-code">{`{
   "repositories": [
     {
@@ -114,7 +114,7 @@ export function Dashboard() {
     }
   ]
 }`}</code>
-        </pre>
+                </pre>
               </div>
             </div>
           </div>
