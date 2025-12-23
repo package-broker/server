@@ -26,7 +26,7 @@ vi.mock('../utils/analytics', () => ({
 
 // Mock DB - limited since we focus on KV path
 vi.mock('../db', () => ({
-    createDatabase: () => ({
+    createD1Database: () => ({
         select: () => ({
             from: () => ({
                 where: () => Promise.resolve([]), // Return empty result
@@ -67,7 +67,19 @@ describe('p2PackageRoute', () => {
             executionCtx: {
                 waitUntil: vi.fn(),
             },
-            get: () => 'req-123',
+            get: (key: string) => {
+                if (key === 'database') {
+                    return {
+                        select: vi.fn().mockReturnValue({
+                            from: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue([]),
+                            }),
+                        }),
+                    };
+                }
+                if (key === 'requestId') return 'req-123';
+                return undefined;
+            },
             // Ensure c.json is a spy we can check
             json: vi.fn((data, status) => new Response(JSON.stringify(data), { status })),
         } as unknown as Context;

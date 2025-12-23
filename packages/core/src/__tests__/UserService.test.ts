@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UserService } from '../services/UserService';
-import { createDatabase } from '../db';
+import { createD1Database as createDatabase } from '../db';
 
 vi.mock('../db');
 

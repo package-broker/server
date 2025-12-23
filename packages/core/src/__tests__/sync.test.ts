@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { syncRepository } from '../sync/repository-sync';
-import { createDatabase } from '../db';
+import { createD1Database as createDatabase } from '../db';
 import { decryptCredentials } from '../utils/encryption';
 import { syncGitHubRepository } from '../sync/github-sync';
 import { syncComposerRepository } from '../sync/strategies/composer-repo';

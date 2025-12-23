@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createJobProcessor } from '../jobs/processor';
 import { syncRepository } from '../sync/repository-sync';
-import { createDatabase } from '../db';
+import { createD1Database as createDatabase } from '../db';
 import { repositories, tokens, artifacts } from '../db/schema';
 
 vi.mock('../sync/repository-sync');

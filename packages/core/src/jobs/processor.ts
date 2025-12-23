@@ -7,7 +7,7 @@
 // Job Processor - abstraction for sync/async job execution
 // Automatically falls back to synchronous execution when Queues are unavailable
 
-import { createDatabase } from '../db';
+import { createD1Database as createDatabase } from '../db';
 import { tokens, artifacts, repositories } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { syncRepository, type SyncEnv, type SyncOptions } from '../sync/repository-sync';
@@ -18,19 +18,19 @@ import { getLogger } from '../utils/logger';
  */
 export type Job =
   | {
-      type: 'update_token_last_used';
-      tokenId: string;
-      timestamp: number;
-    }
+    type: 'update_token_last_used';
+    tokenId: string;
+    timestamp: number;
+  }
   | {
-      type: 'update_artifact_download';
-      artifactId: string;
-      timestamp: number;
-    }
+    type: 'update_artifact_download';
+    artifactId: string;
+    timestamp: number;
+  }
   | {
-      type: 'sync_repository';
-      repoId: string;
-    };
+    type: 'sync_repository';
+    repoId: string;
+  };
 
 /**
  * Environment bindings required for job processing
@@ -79,7 +79,7 @@ export function createJobProcessor(
  * Jobs are processed asynchronously by queue consumers
  */
 class QueueJobProcessor implements JobProcessor {
-  constructor(private queue: Queue) {}
+  constructor(private queue: Queue) { }
 
   async enqueue(job: Job): Promise<void> {
     await this.queue.send(job);
@@ -101,7 +101,7 @@ class SyncJobProcessor implements JobProcessor {
   constructor(
     private env: JobEnv,
     private syncOptions?: SyncOptions
-  ) {}
+  ) { }
 
   async enqueue(job: Job): Promise<void> {
     await this.processJob(job);

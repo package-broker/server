@@ -894,7 +894,7 @@ async function syncPendingRepositories(c: Context<ComposerRouteEnv>): Promise<bo
   );
 
   // Create sync jobs for all pending repositories
-  const syncJobs: Job[] = reposToSync.map((repo) => ({
+  const syncJobs: Job[] = reposToSync.map((repo: any) => ({
     type: 'sync_repository' as const,
     repoId: repo.id,
   }));

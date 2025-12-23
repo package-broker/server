@@ -41,7 +41,7 @@ export async function listRepositories(c: Context<RepositoriesRouteEnv>): Promis
   const allRepos = await db.select().from(repositories).orderBy(repositories.created_at);
 
   // Don't return encrypted credentials
-  const repos = allRepos.map((repo) => ({
+  const repos = allRepos.map((repo: any) => ({
     id: repo.id,
     url: repo.url,
     vcs_type: repo.vcs_type,

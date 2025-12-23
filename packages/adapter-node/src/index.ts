@@ -1,13 +1,16 @@
 
 import { serve } from '@hono/node-server';
-import { createApp } from '@package-broker/core';
+import { createApp, type AppInstance } from '@package-broker/core';
 import { config } from 'dotenv';
-import { createSqliteDatabase, migrateSqliteDatabase } from './drivers/sqlite-driver';
-import { FileSystemDriver } from './drivers/fs-driver';
-import { RedisDriver } from './drivers/redis-driver';
+import { createSqliteDatabase, migrateSqliteDatabase } from './drivers/sqlite-driver.js';
+import { FileSystemDriver } from './drivers/fs-driver.js';
+import { RedisDriver } from './drivers/redis-driver.js';
 import { MemoryCacheDriver, MemoryQueueDriver } from '@package-broker/core';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { serveStatic } from '@hono/node-server/serve-static';
+import { readFile } from 'node:fs/promises';
+import type { Context, Next } from 'hono';
 
 // Load environment variables
 config();
@@ -74,13 +77,34 @@ async function start() {
     const app = createApp({
         database,
         storage,
-        onInit: (appInstance) => {
+        onInit: (appInstance: AppInstance) => {
             // Inject non-standard drivers if needed or custom middleware
-            appInstance.use('*', async (c, next) => {
+            appInstance.use('*', async (c: Context, next: Next) => {
                 // We already passed database/storage to createApp, but we can set extra vars here
                 // Note: createApp factory handles database/storage injection if passed in options
                 await next();
             });
+
+            // Serve config.js dynamically
+            app.get('/config.js', (c: Context) => {
+                return c.text(`window.env = { API_URL: "${process.env.API_URL || '/'}" };`, 200, {
+                    'Content-Type': 'application/javascript',
+                });
+            });
+
+            if (process.env.PUBLIC_DIR) {
+                console.log(`Serving static files from ${process.env.PUBLIC_DIR}`);
+                app.use('/*', serveStatic({ root: process.env.PUBLIC_DIR }));
+
+                // SPA Fallback
+                app.get('*', async (c: Context) => {
+                    try {
+                        return c.html(await readFile(path.join(process.env.PUBLIC_DIR!, 'index.html'), 'utf-8'));
+                    } catch (e) {
+                        return c.text('Not Found', 404);
+                    }
+                });
+            }
         }
     });
 

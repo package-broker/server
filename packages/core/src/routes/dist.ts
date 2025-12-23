@@ -355,7 +355,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                       created_at: now,
                     })
                     .where(eq(artifacts.id, artifact.id))
-                    .catch((err) => {
+                    .catch((err: unknown) => {
                       const logger = getLogger();
                       logger.error('Error updating Packagist artifact record', { artifactId: artifact?.id, packageName, version }, err instanceof Error ? err : new Error(String(err)));
                     })
@@ -376,7 +376,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                       download_count: 0,
                       created_at: now,
                     })
-                    .catch((err) => {
+                    .catch((err: unknown) => {
                       const logger = getLogger();
                       logger.error('Error creating Packagist artifact record', { artifactId, packageName, version }, err instanceof Error ? err : new Error(String(err)));
                     })

@@ -54,7 +54,7 @@ export async function listTokens(c: Context<TokensRouteEnv>): Promise<Response> 
   const db = c.get('database');
   const allTokens = await db.select().from(tokens).orderBy(tokens.created_at);
 
-  const tokenList = allTokens.map((token) => ({
+  const tokenList = allTokens.map((token: any) => ({
     id: token.id,
     description: token.description,
     permissions: token.permissions || 'readonly', // Fallback for existing tokens

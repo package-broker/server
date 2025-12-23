@@ -168,13 +168,7 @@ export function createWorker(config: WorkerConfig = { storage: 'r2' }, env?: Env
   });
 }
 
-// Export default worker for Cloudflare
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const app = createWorker({ storage: 'r2' }, env);
-    return app.fetch(request, env, ctx);
-  },
-};
+
 
 // Export default worker for Cloudflare
 export default {
