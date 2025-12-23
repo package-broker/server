@@ -18,6 +18,11 @@ database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 binding = "KV"
 id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
+# Static Assets (UI)
+[assets]
+directory = "packages/ui/dist"
+binding = "ASSETS"
+
 # R2 Bucket for artifacts
 [[r2_buckets]]
 binding = "R2_BUCKET"

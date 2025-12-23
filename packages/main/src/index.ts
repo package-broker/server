@@ -164,6 +164,13 @@ export function createWorker(config: WorkerConfig = { storage: 'r2' }, env?: Env
 
       // Additional Cloudflare bindings (KV, Queue) can be added here if factory supports them being absent
       // The current factory implementation assumes they are passed in Bindings or handled by specific routes
+      // Serve static assets (UI)
+      app.get('*', async (c) => {
+        if (c.env.ASSETS) {
+          return await c.env.ASSETS.fetch(c.req.raw);
+        }
+        return c.text('UI Assets not available (ASSETS binding missing)', 404);
+      });
     }
   });
 }
