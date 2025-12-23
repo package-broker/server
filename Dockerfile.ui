@@ -7,17 +7,16 @@ COPY packages/core/package.json ./packages/core/
 COPY packages/adapter-node/package.json ./packages/adapter-node/
 COPY packages/main/package.json ./packages/main/
 COPY packages/ui/package.json ./packages/ui/
+COPY packages/shared/package.json ./packages/shared/
 
 RUN npm ci
 
 COPY tsconfig.json ./
 COPY packages/ui ./packages/ui
-# Core might be needed if ui imports it, usually not for frontend unless shared code
-COPY packages/core ./packages/core 
-# Shared might be needed
-# COPY packages/shared ./packages/shared
-# (Assuming shared exists based on package.json, verify if needed. I saw shared in server/packages/adapter-node/package.json dependencies. I should copy it just in case.)
+COPY packages/core ./packages/core
+COPY packages/shared ./packages/shared
 
+RUN npm run build -w packages/shared
 RUN npm run build -w packages/ui
 
 FROM nginx:alpine

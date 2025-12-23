@@ -7,6 +7,7 @@ COPY packages/core/package.json ./packages/core/
 COPY packages/adapter-node/package.json ./packages/adapter-node/
 COPY packages/main/package.json ./packages/main/
 COPY packages/ui/package.json ./packages/ui/
+COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies (including devDependencies for build)
 RUN npm ci
@@ -15,8 +16,10 @@ COPY tsconfig.json ./
 COPY packages/core ./packages/core
 COPY packages/adapter-node ./packages/adapter-node
 COPY packages/ui ./packages/ui
+COPY packages/shared ./packages/shared
 
 # Build packages
+RUN npm run build -w packages/shared
 RUN npm run build -w packages/core
 RUN npm run build -w packages/adapter-node
 RUN npm run build -w packages/ui
