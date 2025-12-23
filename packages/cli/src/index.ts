@@ -92,14 +92,14 @@ function main() {
   log('   npx wrangler login', 'blue');
   log('');
   log('3. Create Cloudflare resources:', 'blue');
-  log('   npx wrangler d1 create composer-proxy-db', 'blue');
-  log('   npx wrangler kv:namespace create COMPOSER_KV', 'blue');
-  log('   npx wrangler r2 bucket create composer-proxy-artifacts', 'blue');
+  log('   npx wrangler d1 create package-broker-db', 'blue');
+  log('   npx wrangler kv:namespace create PACKAGE_BROKER_KV', 'blue');
+  log('   npx wrangler r2 bucket create package-broker-artifacts', 'blue');
   log('');
   log('4. Update wrangler.toml with the generated IDs from step 3', 'blue');
   log('');
   log('5. Apply database migrations:', 'blue');
-  log('   npx wrangler d1 migrations apply composer-proxy-db --remote', 'blue');
+  log('   npx wrangler d1 migrations apply package-broker-db --remote', 'blue');
   log('');
   log('6. Deploy to Cloudflare:', 'blue');
   log('   npx wrangler deploy', 'blue');

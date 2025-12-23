@@ -1,7 +1,7 @@
 {
   "name": "@package-broker/cli",
   "version": "0.2.12",
-  "description": "CLI tool to initialize Cloudflare Composer Proxy configuration",
+  "description": "CLI tool to initialize Package Broker configuration",
   "type": "module",
   "bin": {
     "package-broker": "./dist/index.js"

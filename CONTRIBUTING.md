@@ -1,6 +1,6 @@
 # Contributing to PACKAGE.broker
 
-Thank you for your interest in contributing to Cloudflare Composer Proxy! We welcome contributions from the community to help make this project better.
+Thank you for your interest in contributing to Package Broker! We welcome contributions from the community to help make this project better.
 
 ## getting Started
 

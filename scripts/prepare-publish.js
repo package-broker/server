@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /*
- * Cloudflare Composer Proxy - Prepare Packages for Publishing
+ * Package Broker - Prepare Packages for Publishing
  * Copyright (C) 2025 Łukasz Bajsarowicz
  * Licensed under AGPL-3.0
  *

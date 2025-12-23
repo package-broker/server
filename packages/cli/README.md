@@ -1,12 +1,12 @@
-# Cloudflare Composer Proxy CLI
+# Package Broker CLI
 
-CLI tool to initialize Cloudflare Composer Proxy configuration in your project.
+CLI tool to initialize Package Broker configuration in your project.
 
 ## Usage
 
 ```bash
 npm install @package-broker/cli @package-broker/main
-npx cloudflare-composer-proxy init
+npx package-broker init
 ```
 
 This command will:

@@ -1,6 +1,6 @@
 # E2E Tests
 
-End-to-end tests for the Cloudflare Composer Proxy using Playwright.
+End-to-end tests for the Package Broker using Playwright.
 
 ## Quick Start
 

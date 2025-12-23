@@ -1,4 +1,4 @@
-# Cloudflare Composer Proxy - Example wrangler.toml
+# Package Broker - Example wrangler.toml
 # Copy this file to wrangler.toml and fill in your values
 
 name = "composer-proxy"
