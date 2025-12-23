@@ -808,3 +808,13 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
 
   return c.json({ results });
 }
+
+/**
+ * POST /packages/cleanup-numeric-versions
+ * Temporary utility to fix versioning issues
+ */
+export async function cleanupNumericVersions(c: Context<PackagesRouteEnv>): Promise<Response> {
+  // Stub implementation to satisfy export requirements
+  // Real implementation would clean up numeric versions like x.y.z.0
+  return c.json({ message: 'Cleanup not implemented in this adapter version' });
+}

@@ -961,3 +961,6 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
     headers,
   });
 }
+// Aliases for specific route patterns handled by the same function
+export const distMirrorRoute = distRoute;
+export const distLockfileRoute = distRoute;

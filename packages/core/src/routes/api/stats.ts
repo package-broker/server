@@ -3,7 +3,7 @@
 import type { Context } from 'hono';
 import type { DatabasePort } from '../../ports';
 import { repositories, artifacts, packages } from '../../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 
 export interface StatsRouteEnv {
   Bindings: {
@@ -44,5 +44,35 @@ export async function getStats(c: Context<StatsRouteEnv>): Promise<Response> {
     active_repos: activeRepos,
     cached_packages: cachedPackages,
     total_downloads: totalDownloads,
+  });
+}
+
+/**
+ * GET /packages/:name/:version/stats
+ * Get download stats for a specific package version
+ */
+export async function getPackageStats(c: Context<StatsRouteEnv>): Promise<Response> {
+  const nameParam = c.req.param('name');
+  const version = c.req.param('version');
+  const name = decodeURIComponent(nameParam);
+  const db = c.get('database');
+
+  const [artifact] = await db
+    .select({
+      downloads: artifacts.download_count,
+      last_downloaded: artifacts.last_downloaded_at
+    })
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.package_name, name),
+        eq(artifacts.version, version)
+      )
+    )
+    .limit(1);
+
+  return c.json({
+    downloads: artifact?.downloads || 0,
+    last_downloaded: artifact?.last_downloaded || null
   });
 }
