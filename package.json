@@ -9,10 +9,11 @@
   "scripts": {
     "build": "npm run build -w packages/shared && npm run build -w packages/core && npm run build -w packages/ui && npm run build -w packages/main && npm run build -w packages/cli && npm run build -w packages/adapter-node",
     "dev": "cd packages/ui && npm run build && cd ../.. && npx wrangler dev -c wrangler.dev.toml --local --port 8787",
+    "db:migrate": "npx wrangler d1 execute composer-proxy-db --local --file=./packages/main/migrations/0001_initial.sql -c wrangler.dev.toml",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:mocked": "TEST_MODE=mocked playwright test --project=mocked",
+    "test:e2e:mocked": "npm run db:migrate && TEST_MODE=mocked playwright test --project=mocked",
     "test:e2e:integration": "TEST_MODE=integration playwright test --project=integration",
     "test:e2e:remote": "SKIP_WEBSERVER=1 playwright test",
     "test:e2e:remote:mocked": "SKIP_WEBSERVER=1 playwright test --project=mocked",

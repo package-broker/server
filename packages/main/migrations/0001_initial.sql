@@ -67,14 +67,23 @@ CREATE INDEX IF NOT EXISTS idx_packages_name ON packages(name);
 CREATE UNIQUE INDEX IF NOT EXISTS packages_name_version_unique ON packages(name, version);
 
 -- Admin users table
-CREATE TABLE IF NOT EXISTS admin_users (
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'admin' NOT NULL,
+  status TEXT DEFAULT 'active' NOT NULL,
+  two_factor_secret TEXT,
+  two_factor_enabled BOOLEAN DEFAULT FALSE,
+  recovery_codes TEXT,
+  invite_token TEXT,
+  invite_expires_at INTEGER,
   created_at INTEGER NOT NULL,
   last_login_at INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_invite_token ON users(invite_token);
 
 
