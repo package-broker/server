@@ -106,6 +106,9 @@ export function renderTemplate(
   // Replace literal placeholder strings from template
   template = template.replace(/REPLACE_WITH_YOUR_DATABASE_ID/g, variables.generated_db_id);
   template = template.replace(/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/g, variables.generated_kv_id);
+  
+  // Replace worker name in name = "..." line
+  template = template.replace(/name\s*=\s*["']package-broker["']/, `name = "${variables.worker_name}"`);
 
   // Update main path to point to installed package
   template = template.replace(
