@@ -6,7 +6,7 @@
  * Licensed under AGPL-3.0
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,15 +22,60 @@ export interface TemplateVariables {
 }
 
 /**
- * Load the wrangler.example.toml template from @package-broker/main
+ * Find @package-broker/main package in various locations
  */
-function loadTemplate(targetDir: string): string {
-  const mainPackagePath = join(
+function findMainPackage(targetDir: string): string | null {
+  // Try standard node_modules location
+  const standardPath = join(
     targetDir,
     'node_modules',
     '@package-broker',
     'main'
   );
+  if (existsSync(standardPath)) {
+    return standardPath;
+  }
+
+  // Try parent directory node_modules (workspace root)
+  const parentNodeModules = join(
+    targetDir,
+    '..',
+    'node_modules',
+    '@package-broker',
+    'main'
+  );
+  if (existsSync(parentNodeModules)) {
+    return parentNodeModules;
+  }
+
+  // Try monorepo structure (for development/testing)
+  // Check if we're in a monorepo by looking for packages/main relative to current dir
+  let currentPath = targetDir;
+  for (let i = 0; i < 5; i++) {
+    const monorepoPath = join(currentPath, 'packages', 'main');
+    if (existsSync(monorepoPath)) {
+      return monorepoPath;
+    }
+    const parentPath = join(currentPath, '..');
+    if (parentPath === currentPath) break; // Reached filesystem root
+    currentPath = parentPath;
+  }
+
+  return null;
+}
+
+/**
+ * Load the wrangler.example.toml template from @package-broker/main
+ */
+function loadTemplate(targetDir: string): string {
+  const mainPackagePath = findMainPackage(targetDir);
+
+  if (!mainPackagePath) {
+    throw new Error(
+      '@package-broker/main not found. Please run: npm install @package-broker/main\n' +
+      '   Or ensure you are in a directory with @package-broker/main installed.'
+    );
+  }
 
   const templatePath = join(mainPackagePath, 'wrangler.example.toml');
   

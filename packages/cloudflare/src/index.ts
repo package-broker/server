@@ -47,17 +47,56 @@ function validateWorkerName(name: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(name);
 }
 
-async function copyMigrations(targetDir: string): Promise<number> {
-  const mainPackagePath = join(
+/**
+ * Find @package-broker/main package in various locations
+ */
+function findMainPackage(targetDir: string): string | null {
+  // Try standard node_modules location
+  const standardPath = join(
     targetDir,
     'node_modules',
     '@package-broker',
     'main'
   );
+  if (existsSync(standardPath)) {
+    return standardPath;
+  }
 
-  if (!existsSync(mainPackagePath)) {
+  // Try parent directory node_modules (workspace root)
+  const parentNodeModules = join(
+    targetDir,
+    '..',
+    'node_modules',
+    '@package-broker',
+    'main'
+  );
+  if (existsSync(parentNodeModules)) {
+    return parentNodeModules;
+  }
+
+  // Try monorepo structure (for development/testing)
+  // Check if we're in a monorepo by looking for packages/main relative to current dir
+  let currentPath = targetDir;
+  for (let i = 0; i < 5; i++) {
+    const monorepoPath = join(currentPath, 'packages', 'main');
+    if (existsSync(monorepoPath)) {
+      return monorepoPath;
+    }
+    const parentPath = join(currentPath, '..');
+    if (parentPath === currentPath) break; // Reached filesystem root
+    currentPath = parentPath;
+  }
+
+  return null;
+}
+
+async function copyMigrations(targetDir: string): Promise<number> {
+  const mainPackagePath = findMainPackage(targetDir);
+
+  if (!mainPackagePath) {
     throw new Error(
-      '@package-broker/main not found in node_modules. Please run: npm install @package-broker/main'
+      '@package-broker/main not found. Please run: npm install @package-broker/main\n' +
+      '   Or ensure you are in a directory with @package-broker/main installed.'
     );
   }
 
@@ -91,16 +130,12 @@ async function main() {
   log('\n🚀 PACKAGE.broker - Cloudflare Workers Setup\n', 'bright');
 
   // Check prerequisites
-  const mainPackagePath = join(
-    targetDir,
-    'node_modules',
-    '@package-broker',
-    'main'
-  );
+  const mainPackagePath = findMainPackage(targetDir);
 
-  if (!existsSync(mainPackagePath)) {
-    log('Error: @package-broker/main not found in node_modules', 'red');
+  if (!mainPackagePath) {
+    log('Error: @package-broker/main not found', 'red');
     log('   Please run: npm install @package-broker/main', 'yellow');
+    log('   Or ensure you are in a directory with @package-broker/main installed.', 'yellow');
     process.exit(1);
   }
 
