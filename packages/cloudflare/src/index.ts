@@ -342,19 +342,32 @@ async function main() {
   const uiDistPath = join(uiPackagePath, 'dist');
   
   if (!existsSync(uiDistPath)) {
-    log('⚠️  UI assets not found. Attempting to build UI...', 'yellow');
+    log('⚠️  UI assets not found. Checking UI package...', 'yellow');
     try {
       const { execa } = await import('execa');
       // Check if UI package exists
       if (existsSync(uiPackagePath)) {
+        log('   Building UI...', 'blue');
         await execa('npm', ['run', 'build'], {
           cwd: uiPackagePath,
           stdio: 'pipe',
         });
         log('✓ UI built successfully', 'green');
       } else {
-        log('⚠️  UI package not found. UI will not be available.', 'yellow');
-        log('   Install @package-broker/ui or build UI manually.', 'yellow');
+        log('⚠️  UI package not found. Installing @package-broker/ui...', 'yellow');
+        await execa('npm', ['install', '@package-broker/ui'], {
+          cwd: targetDir,
+          stdio: 'pipe',
+        });
+        // Try to build after installation
+        if (existsSync(uiPackagePath)) {
+          log('   Building UI...', 'blue');
+          await execa('npm', ['run', 'build'], {
+            cwd: uiPackagePath,
+            stdio: 'pipe',
+          });
+          log('✓ UI built successfully', 'green');
+        }
       }
     } catch (error) {
       log('⚠️  Failed to build UI. UI will not be available.', 'yellow');
