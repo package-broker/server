@@ -293,7 +293,10 @@ async function main() {
   // Set encryption key as secret
   log('\n🔐 Setting encryption key as Cloudflare secret...', 'blue');
   try {
-    await setSecret('ENCRYPTION_KEY', encryptionKey, { cwd: targetDir });
+    await setSecret('ENCRYPTION_KEY', encryptionKey, { 
+      cwd: targetDir,
+      workerName: workerName 
+    });
     log('✓ Encryption key set as secret', 'green');
   } catch (error) {
     log(`✗ Failed to set secret: ${(error as Error).message}`, 'red');

@@ -292,14 +292,20 @@ export async function findQueue(
 export async function setSecret(
   secretName: string,
   secretValue: string,
-  options?: { accountId?: string; apiToken?: string; cwd?: string }
+  options?: { accountId?: string; apiToken?: string; cwd?: string; workerName?: string }
 ): Promise<void> {
   const env: Record<string, string> = {};
   if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
   if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
 
+  // Build wrangler command with --name if worker name is provided
+  const wranglerArgs = ['wrangler', 'secret', 'put', secretName];
+  if (options?.workerName) {
+    wranglerArgs.push('--name', options.workerName);
+  }
+
   // wrangler secret put reads from stdin
-  const { stderr, stdout } = await execa('npx', ['wrangler', 'secret', 'put', secretName], {
+  const { stderr, stdout } = await execa('npx', wranglerArgs, {
     cwd: options?.cwd || process.cwd(),
     env,
     input: secretValue + '\n',
