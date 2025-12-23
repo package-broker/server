@@ -7,6 +7,7 @@
     "package.json"
   ],
   "scripts": {
+    "lint": "echo 'no linting configured'",
     "dev": "vite",
     "build": "tsc && vite build",
     "clean": "rm -rf dist",

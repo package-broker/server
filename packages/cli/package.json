@@ -12,6 +12,7 @@
     "README.md"
   ],
   "scripts": {
+    "lint": "echo 'no linting configured'",
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
