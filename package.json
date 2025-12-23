@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/server",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "A lightweight, self-hosted Composer proxy running on Cloudflare Workers",
   "workspaces": [
