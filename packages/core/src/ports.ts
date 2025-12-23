@@ -30,6 +30,9 @@ export interface QueuePort {
     sendBatch(messages: any[]): Promise<void>;
 }
 
+
 export interface AnalyticsPort {
     track(event: string, properties?: Record<string, any>): void;
 }
+
+export type { StorageDriver as StoragePort } from './storage/driver';

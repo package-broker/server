@@ -1,9 +1,12 @@
+```
 // Core package exports
 
 export * from './db';
 export * from './middleware';
 export * from './routes';
-export * from './storage';
+export * from './storage/index';
+export * from './cache/index';
+export * from './queue/index';
 export * from './sync';
 export * from './queue';
 export * from './jobs';
