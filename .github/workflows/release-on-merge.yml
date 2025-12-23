@@ -16,6 +16,7 @@ on:
       - '**/GOLIVE.md'
       - '**/GOLIVE_TRACKING.md'
 
+permissions:
   contents: write
   packages: write
   actions: write
