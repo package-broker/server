@@ -155,8 +155,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish @package-broker/node-server
-        working-directory: packages/server
+      - name: Publish @package-broker/adapter-node
+        working-directory: packages/adapter-node
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -199,16 +199,42 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Version: $VERSION, Tag: $TAG"
 
-      - name: Build and push Docker image
+      - name: Build and push Server (Headless)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.server
+          push: true
+          tags: |
+            ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
+            ghcr.io/package-broker/server:${{ steps.version.outputs.version }}
+            ghcr.io/package-broker/server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push UI
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.ui
+          push: true
+          tags: |
+            ghcr.io/package-broker/ui:${{ steps.version.outputs.tag }}
+            ghcr.io/package-broker/ui:${{ steps.version.outputs.version }}
+            ghcr.io/package-broker/ui:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Complete
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
-            ghcr.io/package-broker/server:${{ steps.version.outputs.version }}
-            ghcr.io/package-broker/server:latest
+            ghcr.io/package-broker/complete:${{ steps.version.outputs.tag }}
+            ghcr.io/package-broker/complete:${{ steps.version.outputs.version }}
+            ghcr.io/package-broker/complete:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
