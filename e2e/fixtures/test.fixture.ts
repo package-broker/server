@@ -26,14 +26,7 @@ interface TestFixtures {
 
 export const test = base.extend<TestFixtures & TestOptions>({
   // Default test mode from project config
-  testMode: [
-    (async ({ }, use, testInfo) => {
-      const mode = (testInfo.project?.use as any)?.testMode || 'mocked';
-      console.log(`TestFixture: Resolved testMode using testInfo: ${mode}`);
-      await use(mode as TestMode);
-    },
-      { option: true }),
-  ],
+  testMode: ['mocked', { option: true }],
 
   // Mode helpers
   isMocked: async ({ testMode }, use) => {
