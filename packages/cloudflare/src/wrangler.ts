@@ -333,7 +333,7 @@ export async function setSecret(
 export async function applyMigrations(
   databaseName: string,
   migrationsDir: string,
-  options?: { accountId?: string; apiToken?: string; remote?: boolean }
+  options?: { accountId?: string; apiToken?: string; remote?: boolean; cwd?: string }
 ): Promise<void> {
   const env: Record<string, string> = {};
   if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
@@ -344,7 +344,9 @@ export async function applyMigrations(
     args.push('--remote');
   }
 
-  const { stdout, stderr } = await execWrangler(args, { env, cwd: migrationsDir });
+  // Run from project root (where wrangler.toml is), not migrations directory
+  const cwd = options?.cwd || process.cwd();
+  const { stdout, stderr } = await execWrangler(args, { env, cwd });
 
   if (stderr && !stderr.includes('Applied') && !stdout.includes('Applied')) {
     // Check if migrations were already applied

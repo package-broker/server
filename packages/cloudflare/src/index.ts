@@ -344,7 +344,10 @@ async function main() {
     // Apply migrations
     log('\n📋 Applying database migrations...', 'blue');
     try {
-      await applyMigrations(dbName, join(targetDir, 'migrations'), { remote: true });
+      await applyMigrations(dbName, join(targetDir, 'migrations'), { 
+        remote: true,
+        cwd: targetDir 
+      });
       log('✓ Migrations applied', 'green');
     } catch (error) {
       log(`⚠️  Migration warning: ${(error as Error).message}`, 'yellow');
