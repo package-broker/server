@@ -365,10 +365,35 @@ export async function applyMigrations(
 }
 
 /**
+ * Get account subdomain from wrangler whoami
+ */
+async function getAccountSubdomain(options?: { accountId?: string; apiToken?: string; cwd?: string }): Promise<string | null> {
+  try {
+    const env: Record<string, string> = {};
+    if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
+    if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
+
+    const { stdout } = await execWrangler(['whoami'], {
+      env,
+      cwd: options?.cwd || process.cwd(),
+    });
+
+    // Extract subdomain from whoami output (format: "lukasz-bajsarowicz" or similar)
+    const subdomainMatch = stdout.match(/@([\w-]+)/);
+    if (subdomainMatch) {
+      return subdomainMatch[1];
+    }
+  } catch (error) {
+    // Ignore errors, return null
+  }
+  return null;
+}
+
+/**
  * Deploy a Worker
  */
 export async function deployWorker(
-  options?: { accountId?: string; apiToken?: string; cwd?: string }
+  options?: { accountId?: string; apiToken?: string; cwd?: string; workerName?: string }
 ): Promise<string> {
   const env: Record<string, string> = {};
   if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
@@ -379,19 +404,47 @@ export async function deployWorker(
     cwd: options?.cwd || process.cwd(),
   });
 
-  // Extract deployment URL from output
-  const urlMatch = stdout.match(/https:\/\/[\w-]+\.workers\.dev/) ||
-                   stdout.match(/https:\/\/[\w.-]+\/workers\.dev/);
+  // Check for deployment errors
+  if (stderr && !stderr.includes('Successfully') && !stderr.includes('deployed')) {
+    const errorMatch = stderr.match(/\[ERROR\][^\n]+/);
+    if (errorMatch) {
+      throw new Error(`Deployment failed: ${errorMatch[0]}`);
+    }
+  }
 
-  if (urlMatch) {
+  // Extract deployment URL from output - try multiple patterns
+  // Pattern 1: https://worker-name.subdomain.workers.dev
+  let urlMatch = stdout.match(/https:\/\/[\w-]+\.workers\.dev/i) ||
+                 stdout.match(/https:\/\/[\w.-]+\.workers\.dev/i);
+  
+  // Pattern 2: deployed to https://...
+  if (!urlMatch) {
+    urlMatch = stdout.match(/deployed to (https:\/\/[\w.-]+\.workers\.dev)/i);
+    if (urlMatch) {
+      urlMatch = [urlMatch[1]];
+    }
+  }
+  
+  // Pattern 3: https://...workers.dev (any format)
+  if (!urlMatch) {
+    urlMatch = stdout.match(/(https:\/\/[^\s]+\.workers\.dev)/i);
+  }
+
+  if (urlMatch && urlMatch[0]) {
     return urlMatch[0];
   }
 
-  if (stderr && !stderr.includes('Successfully')) {
-    throw new Error(`Deployment failed: ${stderr || stdout}`);
+  // Fallback: construct URL from worker name and account subdomain
+  if (options?.workerName) {
+    const subdomain = await getAccountSubdomain(options);
+    if (subdomain) {
+      return `https://${options.workerName}.${subdomain}.workers.dev`;
+    }
+    // If we can't get subdomain, try generic format
+    return `https://${options.workerName}.workers.dev`;
   }
 
-  // Return a placeholder if URL not found (shouldn't happen, but handle gracefully)
+  // Last resort: return placeholder
   return 'https://your-worker.workers.dev';
 }
 

@@ -358,9 +358,14 @@ async function main() {
     // Deploy
     log('\n🚀 Deploying Worker...', 'blue');
     try {
-      const workerUrl = await deployWorker({ cwd: targetDir });
+      const workerUrl = await deployWorker({ 
+        cwd: targetDir,
+        workerName: workerName 
+      });
       log(`✓ Deployed successfully!`, 'green');
       log(`\n🌐 Worker URL: ${workerUrl}`, 'bright');
+      log(`\n💡 Note: If the route shows as "Inactive" in the Cloudflare dashboard,`, 'yellow');
+      log(`   the Worker is still accessible. The status may take a moment to update.`, 'yellow');
     } catch (error) {
       log(`✗ Deployment failed: ${(error as Error).message}`, 'red');
       process.exit(1);
