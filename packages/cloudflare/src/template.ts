@@ -98,10 +98,14 @@ export function renderTemplate(
 ): string {
   let template = loadTemplate(targetDir);
 
-  // Replace placeholders
+  // Replace placeholders (both {{variable}} and REPLACE_WITH_YOUR_* formats)
   template = template.replace(/\{\{worker_name\}\}/g, variables.worker_name);
   template = template.replace(/\{\{generated_db_id\}\}/g, variables.generated_db_id);
   template = template.replace(/\{\{generated_kv_id\}\}/g, variables.generated_kv_id);
+  
+  // Replace literal placeholder strings from template
+  template = template.replace(/REPLACE_WITH_YOUR_DATABASE_ID/g, variables.generated_db_id);
+  template = template.replace(/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/g, variables.generated_kv_id);
 
   // Update main path to point to installed package
   template = template.replace(
