@@ -1,29 +1,29 @@
 {
-    "name": "@package-broker/adapter-node",
-    "version": "0.2.0",
-    "type": "module",
-    "keywords": [],
-    "scripts": {
-        "lint": "echo 'no linting configured'",
-        "dev": "tsx watch src/index.ts",
-        "build": "tsc",
-        "start": "node dist/index.js",
-        "clean": "rm -rf dist"
-    },
-    "dependencies": {
-        "@hono/node-server": "^1.11.1",
-        "@package-broker/core": "*",
-        "@package-broker/shared": "*",
-        "better-sqlite3": "^9.4.3",
-        "dotenv": "^16.4.5",
-        "drizzle-orm": "^0.29.0",
-        "hono": "^4.3.7",
-        "ioredis": "^5.4.1"
-    },
-    "devDependencies": {
-        "@types/better-sqlite3": "^7.6.9",
-        "@types/node": "^20.12.7",
-        "tsx": "^4.7.2",
-        "typescript": "^5.4.5"
-    }
+  "name": "@package-broker/adapter-node",
+  "version": "0.2.1",
+  "type": "module",
+  "keywords": [],
+  "scripts": {
+    "lint": "echo 'no linting configured'",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.11.1",
+    "@package-broker/core": "*",
+    "@package-broker/shared": "*",
+    "better-sqlite3": "^9.4.3",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.29.0",
+    "hono": "^4.3.7",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/node": "^20.12.7",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
 }
