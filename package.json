@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "npm run build -w packages/shared && npm run build -w packages/core && npm run build -w packages/ui && npm run build -w packages/main && npm run build -w packages/cli && npm run build -w packages/adapter-node",
-    "dev": "cd packages/ui && npm run build && cd ../.. && npx wrangler dev --local --port 8787",
+    "dev": "cd packages/ui && npm run build && cd ../.. && npx wrangler dev -c wrangler.dev.toml --local --port 8787",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
