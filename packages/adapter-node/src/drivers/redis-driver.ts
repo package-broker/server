@@ -1,5 +1,5 @@
 
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import type { CachePort, QueuePort } from '@package-broker/core';
 
 export class RedisDriver implements CachePort, QueuePort {

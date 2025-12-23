@@ -5,8 +5,9 @@
   "keywords": [],
   "scripts": {
     "lint": "echo 'no linting configured'",
+    "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsup",
     "start": "node dist/index.js",
     "clean": "rm -rf dist"
   },
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
     "@types/node": "^20.12.7",
+    "tsup": "^8.5.1",
     "tsx": "^4.7.2",
     "typescript": "^5.4.5"
   }
