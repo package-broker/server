@@ -6,7 +6,7 @@ export class ApiMocker {
   constructor(
     private readonly page: Page,
     private readonly active: boolean
-  ) {}
+  ) { }
 
   async mockAll(): Promise<void> {
     if (!this.active) return;
@@ -27,12 +27,24 @@ export class ApiMocker {
 
     await this.page.route('**/api/auth/login', async (route) => {
       const body = await route.request().postDataJSON();
-      if (body?.email === testConfig.credentials.email && 
-          body?.password === testConfig.credentials.password) {
+      if (body?.email === testConfig.credentials.email &&
+        body?.password === testConfig.credentials.password) {
         await route.fulfill({ json: { token: 'mock-token-123' } });
       } else {
         await route.fulfill({ status: 401, json: { message: 'Invalid credentials' } });
       }
+    });
+
+    await this.page.route('**/api/auth/me', (route) => {
+      route.fulfill({
+        json: {
+          id: 'test-admin-id',
+          email: testConfig.credentials.email,
+          role: 'admin',
+          status: 'active',
+          created_at: Date.now()
+        }
+      });
     });
   }
 
