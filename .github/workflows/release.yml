@@ -1,0 +1,295 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on tags like v1.0.0, v2.1.3, etc.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to create (e.g., v1.0.0)'
+        required: true
+        type: string
+      skip_validation:
+        description: 'Skip validation checks (NOT RECOMMENDED)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # Validation job - MUST pass before any publishing
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for version detection
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Typecheck
+        run: npm run typecheck
+        continue-on-error: false
+
+      - name: Build all packages
+        run: npm run build
+        continue-on-error: false
+
+      - name: Run unit tests
+        run: npm test
+        continue-on-error: false
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+        continue-on-error: false
+
+      - name: Run E2E Tests (Mocked)
+        run: npm run test:e2e:mocked
+        env:
+          CI: true
+          TEST_BASE_URL: http://localhost:8787
+        continue-on-error: false
+
+      - name: Verify version consistency
+        run: |
+          # Extract version from tag
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            TAG_VERSION="${{ inputs.version }}"
+            # Remove 'v' prefix if present
+            TAG_VERSION="${TAG_VERSION#v}"
+          fi
+          
+          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
+          
+          # Check if version matches package.json files
+          echo "Checking version consistency..."
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          if [ "$ROOT_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Version mismatch in root package.json: expected $TAG_VERSION, found $ROOT_VERSION"
+            exit 1
+          fi
+          
+          for pkg in packages/*/package.json; do
+            if [ -f "$pkg" ]; then
+              PKG_VERSION=$(node -p "require('./$pkg').version")
+              if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+                echo "❌ Version mismatch in $pkg: expected $TAG_VERSION, found $PKG_VERSION"
+                exit 1
+              fi
+              echo "✅ $pkg version matches: $PKG_VERSION"
+            fi
+          done
+          echo "✅ All package versions match tag: $TAG_VERSION"
+        continue-on-error: false
+
+  # Publish packages - only runs if validation passes
+  publish-packages:
+    name: Publish NPM Packages
+    needs: validate
+    if: ${{ !inputs.skip_validation || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@package-broker'
+          always-auth: true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      - name: Publish @package-broker/shared
+        working-directory: packages/shared
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @package-broker/core
+        working-directory: packages/core
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @package-broker/ui
+        working-directory: packages/ui
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @package-broker/main
+        working-directory: packages/main
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @package-broker/cli
+        working-directory: packages/cli
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @package-broker/node-server
+        working-directory: packages/server
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build and publish Docker images - only runs if validation passes
+  publish-docker:
+    name: Build and Publish Docker Images
+    needs: validate
+    if: ${{ !inputs.skip_validation || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${{ inputs.version }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+            TAG="v$VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION, Tag: $TAG"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
+            ghcr.io/package-broker/server:${{ steps.version.outputs.version }}
+            ghcr.io/package-broker/server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Create GitHub Release - only runs if all publishing succeeds
+  create-release:
+    name: Create GitHub Release
+    needs: [validate, publish-packages, publish-docker]
+    if: ${{ !inputs.skip_validation || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="${{ inputs.version }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            echo "notes=## What's Changed
+
+          Initial release of PACKAGE.broker
+
+          ## Installation
+
+          ### NPM Packages
+          Install from GitHub Packages:
+          \`\`\`bash
+          npm install @package-broker/core --registry https://npm.pkg.github.com
+          \`\`\`
+
+          ### Docker Image
+          \`\`\`bash
+          docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
+          \`\`\`
+
+          ## Packages Published
+          - @package-broker/shared
+          - @package-broker/core
+          - @package-broker/ui
+          - @package-broker/main
+          - @package-broker/cli
+          - @package-broker/node-server" >> $GITHUB_OUTPUT
+          else
+            echo "notes=## What's Changed
+
+          See full changelog: https://github.com/package-broker/server/compare/$PREV_TAG...${{ steps.version.outputs.tag }}
+
+          ## Installation
+
+          ### NPM Packages
+          \`\`\`bash
+          npm install @package-broker/core@${{ steps.version.outputs.tag }} --registry https://npm.pkg.github.com
+          \`\`\`
+
+          ### Docker Image
+          \`\`\`bash
+          docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
+          \`\`\`" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          body: ${{ steps.release-notes.outputs.notes }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
