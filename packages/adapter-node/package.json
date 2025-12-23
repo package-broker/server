@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/adapter-node",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "type": "module",
   "keywords": [],
   "scripts": {
