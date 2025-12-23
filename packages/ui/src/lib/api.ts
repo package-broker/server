@@ -1,6 +1,6 @@
 // API client for admin endpoints
 
-const API_BASE = '/api';
+const API_BASE = (window as any).env?.API_URL || '/api';
 const STORAGE_KEY = 'composer_proxy_admin_token';
 
 export function getAuthToken(): string | null {

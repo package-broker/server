@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_DRIVER=sqlite
+      - DB_URL=/data/db.sqlite
+      - STORAGE_DRIVER=fs
+      - STORAGE_PATH=/data/storage
+      - API_URL=/api
+      # Optional: Use Redis for cache/queue if desired
+      # - CACHE_DRIVER=redis
+      # - CACHE_URL=redis://redis:6379
+      # - QUEUE_DRIVER=redis
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # users-db:
+    # If using Postgres, add service here
+
+  # redis:
+    # If using Redis, add service here
+    # image: redis:alpine
+    # ports:
+    #   - "6379:6379"
