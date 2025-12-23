@@ -110,6 +110,17 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // The tag push will automatically trigger the release.yml workflow
-            console.log('Tag pushed, release workflow will be triggered automatically');
+            const version = 'v${{ needs.calculate-version.outputs.version }}';
+            console.log(`Triggering release workflow for ${version}...`);
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: 'main',
+              inputs: {
+                version: version,
+                skip_validation: 'false'
+              }
+            });
+            console.log('Release workflow triggered successfully');
 
