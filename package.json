@@ -23,6 +23,8 @@
     "typecheck": "npm run typecheck --workspaces"
   },
   "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
     "@playwright/test": "^1.48.0",
     "@types/node": "^20.11.0",
     "typescript": "^5.3.3",
