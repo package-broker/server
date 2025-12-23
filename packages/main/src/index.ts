@@ -126,7 +126,7 @@ export function createWorker(config: WorkerConfig = { storage: 'r2' }, env?: Env
   // Define drivers initialization logic
   // Since createApp supports injection, we'll wrap it
 
-  return createApp({
+  const app = createApp({
     onInit: (app) => {
       // Check for API token
       // (Auth middleware handles this, but here we can add platform-specific middleware if needed)
@@ -164,15 +164,33 @@ export function createWorker(config: WorkerConfig = { storage: 'r2' }, env?: Env
 
       // Additional Cloudflare bindings (KV, Queue) can be added here if factory supports them being absent
       // The current factory implementation assumes they are passed in Bindings or handled by specific routes
-      // Serve static assets (UI)
-      app.get('*', async (c) => {
-        if (c.env.ASSETS) {
-          return await c.env.ASSETS.fetch(c.req.raw);
-        }
-        return c.text('UI Assets not available (ASSETS binding missing)', 404);
-      });
     }
   });
+
+  // Serve static assets (UI)
+  // Register this AFTER createApp so it doesn't shadow API routes
+  app.get('*', async (c) => {
+    if (c.env.ASSETS) {
+      // Try to serve the asset
+      const response = await c.env.ASSETS.fetch(c.req.raw);
+      if (response.status < 400) {
+        return response;
+      }
+
+      // SPA Fallback: If 404 and accepting html, serve index.html
+      // safely check accept header
+      const accept = c.req.header('accept');
+      if (response.status === 404 && accept && accept.includes('text/html')) {
+        const indexResponse = await c.env.ASSETS.fetch(new URL('/index.html', c.req.url).toString(), c.req.raw);
+        return indexResponse;
+      }
+
+      return response;
+    }
+    return c.text('UI Assets not available (ASSETS binding missing)', 404);
+  });
+
+  return app;
 }
 
 
