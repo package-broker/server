@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w packages/shared && npm run build -w packages/core && npm run build -w packages/ui && npm run build -w packages/main && npm run build -w packages/cli && npm run build -w packages/adapter-node",
+    "build": "npm run build -w packages/shared && npm run build -w packages/core && npm run build -w packages/ui && npm run build -w packages/main && npm run build -w packages/cli && npm run build -w packages/cloudflare && npm run build -w packages/adapter-node",
     "dev": "cd packages/ui && npm run build && cd ../.. && npx wrangler dev -c wrangler.dev.toml --local --port 8787",
     "db:migrate": "npx wrangler d1 execute package-broker-db --local --file=./packages/main/migrations/0001_initial.sql -c wrangler.dev.toml",
     "test": "vitest run",

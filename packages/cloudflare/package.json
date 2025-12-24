@@ -1,0 +1,35 @@
+{
+  "name": "@package-broker/cloudflare",
+  "version": "0.2.12",
+  "description": "Interactive CLI tool for deploying PACKAGE.broker to Cloudflare Workers",
+  "type": "module",
+  "bin": {
+    "package-broker-cloudflare": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "lint": "echo 'no linting configured'",
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@package-broker/main": "*",
+    "prompts": "^2.4.2",
+    "execa": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/prompts": "^2.4.9",
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
+

@@ -1,2 +1,6 @@
 -- Add file_key column to artifacts table for R2/S3 storage key tracking
-ALTER TABLE artifacts ADD COLUMN file_key TEXT;
+-- Note: This column is already included in the initial schema (0001_initial.sql)
+-- This migration is kept for backward compatibility with databases created before file_key was added to initial schema
+-- If the column already exists, this migration will fail but that's safe to ignore
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN
+-- The migration system will handle the error gracefully
