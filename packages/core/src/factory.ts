@@ -52,6 +52,7 @@ import {
     initAnalytics,
     type StorageDriver,
     type DatabasePort,
+    type CachePort,
 } from './index';
 
 // Generic Environment Interface
@@ -69,6 +70,7 @@ export interface AppBindings {
 export interface AppVariables {
     storage: StorageDriver;
     database: DatabasePort;
+    cache?: CachePort;
     requestId?: string;
     session?: { userId: string; email: string };
 }
@@ -83,6 +85,7 @@ export type AppInstance = Hono<{ Bindings: AppBindings; Variables: AppVariables 
 export function createApp(options?: {
     storage?: StorageDriver;
     database?: DatabasePort;
+    cache?: CachePort;
     onInit?: (app: AppInstance) => void;
 }): AppInstance {
     const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
@@ -113,7 +116,7 @@ export function createApp(options?: {
         );
     });
 
-    // Inject database and storage drivers if provided
+    // Inject database, storage, and cache drivers if provided
     // This MUST happen regardless of whether onInit is provided
     if (options?.database) {
         app.use('*', async (c, next) => {
@@ -124,6 +127,12 @@ export function createApp(options?: {
     if (options?.storage) {
         app.use('*', async (c, next) => {
             c.set('storage', options.storage!);
+            await next();
+        });
+    }
+    if (options?.cache) {
+        app.use('*', async (c, next) => {
+            c.set('cache', options.cache!);
             await next();
         });
     }
