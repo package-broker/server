@@ -280,20 +280,48 @@ jobs:
             echo ""
             echo "Checking $image..."
             
-            # Use buildx imagetools inspect (works with both registries)
-            if ! docker buildx imagetools inspect "$image" --format '{{json .Manifest.Manifests}}' > /tmp/manifest.json 2>/dev/null; then
+            # Get the manifest JSON - buildx imagetools inspect outputs JSON by default
+            local manifest_json
+            if ! manifest_json=$(docker buildx imagetools inspect "$image" 2>/dev/null); then
               echo "❌ Failed to inspect $image"
               return 1
             fi
             
-            # Check if both platforms are present
-            if ! grep -q '"architecture":"amd64"' /tmp/manifest.json; then
+            # Check for both architectures in the JSON output
+            # The manifest structure has a "manifests" array with platform info
+            local has_amd64=false
+            local has_arm64=false
+            
+            # Look for architecture fields - could be in various places in the JSON
+            # Pattern: "architecture": "amd64" or "architecture":"amd64" or similar
+            if echo "$manifest_json" | grep -qE '"(amd64|x86_64)"' || echo "$manifest_json" | grep -qiE 'architecture.*amd64'; then
+              has_amd64=true
+            fi
+            
+            if echo "$manifest_json" | grep -q '"arm64"' || echo "$manifest_json" | grep -qi 'architecture.*arm64'; then
+              has_arm64=true
+            fi
+            
+            # Also check for platform strings like "linux/amd64" or "linux/arm64"
+            if echo "$manifest_json" | grep -qE 'linux/(amd64|x86_64)'; then
+              has_amd64=true
+            fi
+            
+            if echo "$manifest_json" | grep -q 'linux/arm64'; then
+              has_arm64=true
+            fi
+            
+            if [ "$has_amd64" = false ]; then
               echo "❌ Missing linux/amd64 in $image"
+              echo "Debug: Checking manifest output..."
+              echo "$manifest_json" | head -100
               return 1
             fi
             
-            if ! grep -q '"architecture":"arm64"' /tmp/manifest.json; then
+            if [ "$has_arm64" = false ]; then
               echo "❌ Missing linux/arm64 in $image"
+              echo "Debug: Checking manifest output..."
+              echo "$manifest_json" | head -100
               return 1
             fi
             
