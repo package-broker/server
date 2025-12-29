@@ -40,7 +40,7 @@ export default function Login({ onSuccess }: LoginProps) {
         if (data.code === '2fa_required') {
           setError('2FA required');
         } else {
-          setError(data.error || 'Invalid credentials');
+          setError(data.message || data.error || 'Invalid credentials');
         }
       }
     } catch (err) {

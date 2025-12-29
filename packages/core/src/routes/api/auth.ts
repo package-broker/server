@@ -80,8 +80,13 @@ export async function loginRoute(c: Context): Promise<Response> {
     success: true,
   });
 
-  // Store session in KV (expires in 24 hours)
-  await c.env.KV.put(`session:${sessionToken}`, JSON.stringify({
+  // Store session in cache (expires in 24 hours)
+  // Use injected cache driver (Node.js) or fall back to c.env.KV (Cloudflare)
+  const cache = c.get('cache') || c.env?.KV;
+  if (!cache) {
+    throw new Error('No session storage available (cache driver or KV not configured)');
+  }
+  await cache.put(`session:${sessionToken}`, JSON.stringify({
     userId: user.id,
     email: user.email,
     role: user.role,
@@ -109,7 +114,10 @@ export async function logoutRoute(c: Context): Promise<Response> {
   const authHeader = c.req.header('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    await c.env.KV.delete(`session:${token}`);
+    const cache = c.get('cache') || c.env?.KV;
+    if (cache) {
+      await cache.delete(`session:${token}`);
+    }
   }
   return c.json({ message: 'Logged out' });
 }
@@ -286,8 +294,19 @@ export async function sessionMiddleware(c: Context, next: () => Promise<void>): 
 
   const token = authHeader.slice(7);
 
-  // Check KV for session
-  const sessionData = await c.env.KV.get(`session:${token}`, 'json');
+  // Check cache for session (use injected cache or fall back to c.env.KV)
+  const cache = c.get('cache') || c.env?.KV;
+  if (!cache) {
+    return c.json({ error: 'Server Error', message: 'Session storage not configured' }, 500);
+  }
+
+  // Try to get session - handle both CachePort (getJson) and KV (get with 'json' type)
+  let sessionData;
+  if (typeof cache.getJson === 'function') {
+    sessionData = await cache.getJson(`session:${token}`);
+  } else {
+    sessionData = await cache.get(`session:${token}`, 'json');
+  }
 
   if (!sessionData) {
     return c.json({ error: 'Unauthorized', message: 'Invalid or expired session' }, 401);

@@ -11,6 +11,30 @@ import type { Database } from './db/index';
 export type DatabasePort = Database;
 
 /**
+ * Database Driver Interface
+ * Abstract interface for database drivers (SQLite, PostgreSQL, etc.)
+ * Follows Port-Adapter pattern for database-agnostic operations
+ */
+export interface DatabaseDriver {
+    /**
+     * Check if the database has been initialized (migrations applied)
+     * Uses Drizzle's __drizzle_migrations table for database-agnostic check
+     */
+    isInitialized(): Promise<boolean>;
+    
+    /**
+     * Run database migrations from the specified migrations folder
+     * @param migrationsPath Path to directory containing migration files
+     */
+    runMigrations(migrationsPath: string): Promise<void>;
+    
+    /**
+     * Get the database connection/ORM instance
+     */
+    getConnection(): DatabasePort;
+}
+
+/**
  * Cache Port
  * Abstract interface for caching (KV, Redis, Memory)
  */
