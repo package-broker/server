@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/cloudflare",
-  "version": "0.2.12",
+  "version": "0.3.0",
   "description": "Interactive CLI tool for deploying PACKAGE.broker to Cloudflare Workers",
   "type": "module",
   "bin": {
@@ -32,5 +32,3 @@
     "registry": "https://npm.pkg.github.com"
   }
 }
-
-
