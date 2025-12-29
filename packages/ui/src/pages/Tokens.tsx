@@ -117,7 +117,20 @@ export function Tokens() {
         )}
       </div>
 
-      {/* ... */}
+      {/* Generate Token Modal */}
+      {showModal && (
+        <GenerateTokenModal
+          onClose={() => {
+            setShowModal(false);
+            setNewToken(null);
+          }}
+          onCreated={(token) => {
+            setNewToken(token);
+          }}
+          newToken={newToken}
+          kvAvailable={kvAvailable}
+        />
+      )}
     </div>
   );
 }
@@ -167,8 +180,36 @@ function TokenRow({
           token.description
         )}
       </td>
-      {/* ... (lines 200-245 unchanged) */}
-
+      <td className="px-6 py-4 text-sm text-slate-400">
+        <div className="flex items-center gap-2">
+          {token.permissions === 'readonly' ? (
+            <>
+              <Shield className="w-4 h-4" />
+              <span>Read-only</span>
+            </>
+          ) : (
+            <>
+              <Key className="w-4 h-4" />
+              <span>Write</span>
+            </>
+          )}
+        </div>
+      </td>
+      {kvAvailable && (
+        <td className="px-6 py-4 text-sm text-slate-400">
+          {token.rate_limit_max === null || token.rate_limit_max === 0
+            ? 'Unlimited'
+            : `${token.rate_limit_max.toLocaleString()}/hour`}
+        </td>
+      )}
+      <td className="px-6 py-4 text-sm text-slate-400">
+        {new Date(token.created_at * 1000).toLocaleString()}
+      </td>
+      <td className="px-6 py-4 text-sm text-slate-400">
+        {token.last_used_at
+          ? new Date(token.last_used_at * 1000).toLocaleString()
+          : 'Never'}
+      </td>
       {isAdmin && (
         <td className="px-6 py-4 text-right">
           <div className="flex items-center justify-end gap-2">
