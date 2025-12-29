@@ -17,7 +17,8 @@ COPY tsconfig.json ./
 COPY packages/core ./packages/core
 COPY packages/adapter-node ./packages/adapter-node
 COPY packages/shared ./packages/shared
-# We don't need main or ui for the server build
+# Copy migrations directory from main package (needed for database initialization)
+COPY packages/main/migrations ./packages/main/migrations
 
 # Build packages
 RUN npm run build -w packages/shared
