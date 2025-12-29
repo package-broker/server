@@ -75,7 +75,7 @@ jobs:
           CONTAINER_ID=$(docker run -d \
             -p 3000:3000 \
             -e DB_DRIVER=sqlite \
-            -e DB_URL="file:/tmp/test.db" \
+            -e DB_URL="/tmp/test.db" \
             -e STORAGE_DRIVER=fs \
             -e STORAGE_FS_PATH="/tmp/storage" \
             -e CACHE_DRIVER=memory \
@@ -120,10 +120,9 @@ jobs:
           # Check for runtime errors in logs (exclude expected warnings)
           echo "Checking for runtime errors..."
           # Filter out expected warnings about database initialization
-          # Filter out expected warnings about database initialization
           if docker logs $CONTAINER_ID 2>&1 | grep -iE "(error|exception|failed|cannot|uncaught)" | \
              grep -v -iE "(database not initialized|warning|⚠️)"; then
-             grep -v -iE "(database not initialized|warning|⚠️)"; then
+            echo "❌ Found errors in container logs:"
             docker logs $CONTAINER_ID
             docker rm -f $CONTAINER_ID
             exit 1
