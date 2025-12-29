@@ -19,7 +19,7 @@ on:
 permissions:
   contents: write
   packages: write
-  id-token: write
+  id-token: write  # Required for OIDC/Trusted Publishing
 
 jobs:
   # Validation job - MUST pass before any publishing
@@ -124,30 +124,32 @@ jobs:
       - name: Build all packages
         run: npm run build
 
-      # Publish to npmjs.org
-      - name: Setup Node.js for npmjs.org
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-          always-auth: true
+      # Ensure npm version supports OIDC (11.5.1+)
+      - name: Update npm for OIDC support
+        run: npm install -g npm@latest
 
-      - name: Publish packages to npmjs.org (token or OIDC)
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Publish to npmjs.org
+      - name: Publish packages to npmjs.org
         run: |
           set -euo pipefail
 
-          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+          if [ -n "${NPM_TOKEN:-}" ]; then
             echo "NPM_TOKEN is set; publishing to npmjs.org using token auth."
+            # Setup with token authentication
+            npm config set registry https://registry.npmjs.org
+            npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
           else
-            echo "NPM_TOKEN is not set; publishing to npmjs.org via OIDC/Trusted Publishing (must be configured on npm)."
+            echo "NPM_TOKEN is not set; publishing to npmjs.org via OIDC/Trusted Publishing."
+            # Setup without token - npm will use OIDC automatically with --provenance
+            npm config set registry https://registry.npmjs.org
           fi
 
           for pkg in shared core ui main cli adapter-node; do
             echo "Publishing @package-broker/${pkg} to npmjs.org..."
             (cd "packages/${pkg}" && npm publish --access public --provenance)
           done
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Publish to GitHub Packages
       - name: Setup Node.js for GitHub Packages
