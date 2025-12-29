@@ -224,9 +224,9 @@ jobs:
             ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
             ghcr.io/package-broker/server:${{ steps.version.outputs.version }}
             ghcr.io/package-broker/server:latest
-            package-broker/server:${{ steps.version.outputs.tag }}
-            package-broker/server:${{ steps.version.outputs.version }}
-            package-broker/server:latest
+            packagebroker/server:${{ steps.version.outputs.tag }}
+            packagebroker/server:${{ steps.version.outputs.version }}
+            packagebroker/server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -240,9 +240,9 @@ jobs:
             ghcr.io/package-broker/ui:${{ steps.version.outputs.tag }}
             ghcr.io/package-broker/ui:${{ steps.version.outputs.version }}
             ghcr.io/package-broker/ui:latest
-            package-broker/ui:${{ steps.version.outputs.tag }}
-            package-broker/ui:${{ steps.version.outputs.version }}
-            package-broker/ui:latest
+            packagebroker/ui:${{ steps.version.outputs.tag }}
+            packagebroker/ui:${{ steps.version.outputs.version }}
+            packagebroker/ui:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -256,9 +256,9 @@ jobs:
             ghcr.io/package-broker/complete:${{ steps.version.outputs.tag }}
             ghcr.io/package-broker/complete:${{ steps.version.outputs.version }}
             ghcr.io/package-broker/complete:latest
-            package-broker/complete:${{ steps.version.outputs.tag }}
-            package-broker/complete:${{ steps.version.outputs.version }}
-            package-broker/complete:latest
+            packagebroker/complete:${{ steps.version.outputs.tag }}
+            packagebroker/complete:${{ steps.version.outputs.version }}
+            packagebroker/complete:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -311,7 +311,7 @@ jobs:
               echo ""
               echo "From Docker Hub:"
               echo "\`\`\`bash"
-              echo "docker pull package-broker/server:${{ steps.version.outputs.tag }}"
+              echo "docker pull packagebroker/server:${{ steps.version.outputs.tag }}"
               echo "\`\`\`"
               echo ""
               echo "## Packages Published"
@@ -345,7 +345,7 @@ jobs:
               echo ""
               echo "From Docker Hub:"
               echo "\`\`\`bash"
-              echo "docker pull package-broker/server:${{ steps.version.outputs.tag }}"
+              echo "docker pull packagebroker/server:${{ steps.version.outputs.tag }}"
               echo "\`\`\`"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
