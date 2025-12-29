@@ -40,14 +40,14 @@ async function start() {
     // Check if database is initialized (logging only)
     const isInitialized = await databaseDriver.isInitialized();
     if (!isInitialized) {
-        console.error('');
-        console.error('❌ ERROR: DATABASE NOT INITIALIZED');
-        console.error('   Run migration scripts before starting the server:');
-        console.error('');
-        console.error('   docker exec <container> node packages/adapter-node/scripts/migrate.cjs /data/database.sqlite');
-        console.error('');
-        console.error('   📖 See: https://package.broker/docs/getting-started/quickstart-docker');
-        console.error('');
+        console.warn('');
+        console.warn('⚠️  DATABASE NOT INITIALIZED');
+        console.warn('   Run migration scripts to initialize the database:');
+        console.warn('');
+        console.warn('   docker exec <container> node packages/adapter-node/scripts/migrate.cjs /data/database.sqlite');
+        console.warn('');
+        console.warn('   📖 See: https://package.broker/docs/getting-started/quickstart-docker');
+        console.warn('');
     }
     
     const database = databaseDriver.getConnection();
