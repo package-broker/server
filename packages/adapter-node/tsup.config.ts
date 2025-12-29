@@ -10,6 +10,7 @@ const cloudflarePlugin = {
     },
 };
 
+
 // Node.js built-in modules that should not be bundled
 const nodeBuiltins = [
     'util', 'path', 'fs', 'os', 'crypto', 'stream', 'events', 'buffer',
@@ -26,14 +27,8 @@ export default defineConfig({
     external: nodeBuiltins,
     clean: true,
     esbuildPlugins: [cloudflarePlugin],
-    banner: {
-        js: `
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-const require = createRequire(import.meta.url);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-`.trim(),
-    },
+    // Note: We don't add a banner here because dependencies already handle
+    // their own require() shims. The external: nodeBuiltins ensures Node.js
+    // built-ins are not bundled, allowing require() calls to work.
+    // If a dependency needs require(), it should provide its own shim.
 });
