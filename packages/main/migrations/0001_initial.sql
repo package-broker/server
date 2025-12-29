@@ -1,4 +1,6 @@
 -- Initial schema migration
+-- Complete database schema for PACKAGE.broker
+-- Consolidated from all incremental migrations
 
 -- Repositories table
 CREATE TABLE IF NOT EXISTS repositories (
@@ -8,6 +10,7 @@ CREATE TABLE IF NOT EXISTS repositories (
   credential_type TEXT NOT NULL,
   auth_credentials TEXT NOT NULL,
   composer_json_path TEXT,
+  package_filter TEXT,
   status TEXT DEFAULT 'pending',
   error_message TEXT,
   last_synced_at INTEGER,
@@ -24,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tokens (
   id TEXT PRIMARY KEY,
   description TEXT NOT NULL,
   token_hash TEXT NOT NULL,
+  permissions TEXT NOT NULL DEFAULT 'readonly',
   rate_limit_max INTEGER DEFAULT 1000,
   created_at INTEGER NOT NULL,
   expires_at INTEGER,
@@ -57,8 +61,15 @@ CREATE TABLE IF NOT EXISTS packages (
   name TEXT NOT NULL,
   version TEXT NOT NULL,
   dist_url TEXT NOT NULL,
+  source_dist_url TEXT,
+  dist_reference TEXT,
+  description TEXT,
+  license TEXT,
+  package_type TEXT,
+  homepage TEXT,
   released_at INTEGER,
   readme_content TEXT,
+  metadata TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -66,7 +77,6 @@ CREATE INDEX IF NOT EXISTS idx_packages_repo_id ON packages(repo_id);
 CREATE INDEX IF NOT EXISTS idx_packages_name ON packages(name);
 CREATE UNIQUE INDEX IF NOT EXISTS packages_name_version_unique ON packages(name, version);
 
--- Admin users table
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -85,5 +95,3 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_invite_token ON users(invite_token);
-
-
