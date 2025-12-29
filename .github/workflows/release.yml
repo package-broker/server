@@ -193,6 +193,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Extract version from tag
         id: version
         run: |
@@ -218,6 +224,9 @@ jobs:
             ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}
             ghcr.io/package-broker/server:${{ steps.version.outputs.version }}
             ghcr.io/package-broker/server:latest
+            package-broker/server:${{ steps.version.outputs.tag }}
+            package-broker/server:${{ steps.version.outputs.version }}
+            package-broker/server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -231,6 +240,9 @@ jobs:
             ghcr.io/package-broker/ui:${{ steps.version.outputs.tag }}
             ghcr.io/package-broker/ui:${{ steps.version.outputs.version }}
             ghcr.io/package-broker/ui:latest
+            package-broker/ui:${{ steps.version.outputs.tag }}
+            package-broker/ui:${{ steps.version.outputs.version }}
+            package-broker/ui:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -244,6 +256,9 @@ jobs:
             ghcr.io/package-broker/complete:${{ steps.version.outputs.tag }}
             ghcr.io/package-broker/complete:${{ steps.version.outputs.version }}
             ghcr.io/package-broker/complete:latest
+            package-broker/complete:${{ steps.version.outputs.tag }}
+            package-broker/complete:${{ steps.version.outputs.version }}
+            package-broker/complete:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -288,9 +303,15 @@ jobs:
               echo "npm install @package-broker/core --registry https://npm.pkg.github.com"
               echo "\`\`\`"
               echo ""
-              echo "### Docker Image"
+              echo "### Docker Images"
+              echo "From GitHub Container Registry:"
               echo "\`\`\`bash"
               echo "docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}"
+              echo "\`\`\`"
+              echo ""
+              echo "From Docker Hub:"
+              echo "\`\`\`bash"
+              echo "docker pull package-broker/server:${{ steps.version.outputs.tag }}"
               echo "\`\`\`"
               echo ""
               echo "## Packages Published"
@@ -316,9 +337,15 @@ jobs:
               echo "npm install @package-broker/core@${{ steps.version.outputs.tag }} --registry https://npm.pkg.github.com"
               echo "\`\`\`"
               echo ""
-              echo "### Docker Image"
+              echo "### Docker Images"
+              echo "From GitHub Container Registry:"
               echo "\`\`\`bash"
               echo "docker pull ghcr.io/package-broker/server:${{ steps.version.outputs.tag }}"
+              echo "\`\`\`"
+              echo ""
+              echo "From Docker Hub:"
+              echo "\`\`\`bash"
+              echo "docker pull package-broker/server:${{ steps.version.outputs.tag }}"
               echo "\`\`\`"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
