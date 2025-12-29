@@ -31,15 +31,14 @@ export class SqliteDriver implements DatabaseDriver {
     }
 
     /**
-     * Check if database is initialized by checking for Drizzle's migrations table
-     * This is database-agnostic as Drizzle uses __drizzle_migrations for all databases
+     * Check if database is initialized by checking for the migrations tracking table
      */
     async isInitialized(): Promise<boolean> {
         const { sqlite } = this.connection;
         try {
-            // Check for Drizzle's migration tracking table (database-agnostic approach)
+            // Check for migration tracking table created by migrate.cjs script
             const result = sqlite.prepare(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='__applied_migrations'"
             ).get();
             return !!result;
         } catch {
