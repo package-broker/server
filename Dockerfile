@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY packages/core/package.json ./packages/core/
 COPY packages/adapter-node/package.json ./packages/adapter-node/
+COPY packages/shared/package.json ./packages/shared/
 COPY packages/main/package.json ./packages/main/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/shared/package.json ./packages/shared/
@@ -33,10 +34,11 @@ COPY package*.json ./
 COPY packages/core/package.json ./packages/core/
 COPY packages/adapter-node/package.json ./packages/adapter-node/
 
-# Install only production dependencies
-RUN npm ci --omit=dev
+# Install only production dependencies (including workspace deps)
+RUN npm ci --omit=dev --workspaces --include-workspace-root
 
 COPY --from=builder /app/packages/core/dist ./packages/core/dist
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/adapter-node/dist ./packages/adapter-node/dist
 COPY --from=builder /app/packages/ui/dist ./public
 
@@ -48,4 +50,4 @@ ENV CACHE_DRIVER=memory
 ENV QUEUE_DRIVER=memory
 ENV PUBLIC_DIR=/app/public
 
-CMD ["node", "packages/adapter-node/dist/index.js"]
+CMD ["node", "packages/adapter-node/dist/index.cjs"]

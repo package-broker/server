@@ -21,20 +21,14 @@ const nodeBuiltins = [
 
 export default defineConfig({
     entry: ['src/index.ts'],
-    format: ['esm'],
+    // Output CommonJS to avoid ESM/CJS interop issues entirely.
+    // CJS uses require() natively - no createRequire shims needed.
+    format: ['cjs'],
     target: 'node20',
+    // Keep core/shared bundled so Node can run the built output even if core uses
+    // extensionless / directory imports that Node ESM won't resolve at runtime.
     noExternal: ['@package-broker/core', '@package-broker/shared'],
     external: nodeBuiltins,
     clean: true,
     esbuildPlugins: [cloudflarePlugin],
-    // Inject require shim into ALL output files (entry + chunks)
-    // This is necessary because chunks use require() during module loading
-    banner: {
-        js: `
-import { createRequire } from 'module';
-if (typeof globalThis.require === 'undefined') {
-  globalThis.require = createRequire(import.meta.url);
-}
-`.trim(),
-    },
 });

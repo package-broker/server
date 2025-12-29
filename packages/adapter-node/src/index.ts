@@ -7,15 +7,12 @@ import { FileSystemDriver } from './drivers/fs-driver.js';
 import { RedisDriver } from './drivers/redis-driver.js';
 import { MemoryCacheDriver, MemoryQueueDriver } from '@package-broker/core';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { readFile } from 'node:fs/promises';
 import type { Context, Next } from 'hono';
 
 // Load environment variables
 config();
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configuration
 const PORT = Number(process.env.PORT) || 3000;
@@ -86,7 +83,7 @@ async function start() {
             });
 
             // Serve config.js dynamically
-            app.get('/config.js', (c: Context) => {
+            appInstance.get('/config.js', (c: Context) => {
                 return c.text(`window.env = { API_URL: "${process.env.API_URL || '/'}" };`, 200, {
                     'Content-Type': 'application/javascript',
                 });
@@ -94,10 +91,10 @@ async function start() {
 
             if (process.env.PUBLIC_DIR) {
                 console.log(`Serving static files from ${process.env.PUBLIC_DIR}`);
-                app.use('/*', serveStatic({ root: process.env.PUBLIC_DIR }));
+                appInstance.use('/*', serveStatic({ root: process.env.PUBLIC_DIR }));
 
                 // SPA Fallback
-                app.get('*', async (c: Context) => {
+                appInstance.get('*', async (c: Context) => {
                     try {
                         return c.html(await readFile(path.join(process.env.PUBLIC_DIR!, 'index.html'), 'utf-8'));
                     } catch (e) {
