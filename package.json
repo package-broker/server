@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/server",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "private": true,
   "description": "PACKAGE.broker - Minimalistic, SOC-2 Compatible Composer Mirror (Cloudflare Workers)",
   "workspaces": [
