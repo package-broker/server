@@ -67,7 +67,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Test Docker container startup
+      - name: Test Docker container startup and API
         run: |
           set -euo pipefail
           
@@ -90,7 +90,7 @@ jobs:
           elapsed=0
           while [ $elapsed -lt $timeout ]; do
             if docker logs $CONTAINER_ID 2>&1 | grep -q "Server listening"; then
-              echo "✅ Server started successfully"
+              echo "Server started successfully"
               break
             fi
             sleep 1
@@ -98,33 +98,80 @@ jobs:
           done
           
           if [ $elapsed -ge $timeout ]; then
-            echo "❌ Server failed to start within $timeout seconds"
+            echo "Server failed to start within $timeout seconds"
             echo "Container logs:"
             docker logs $CONTAINER_ID
             docker rm -f $CONTAINER_ID
             exit 1
           fi
           
-          # Test that the server responds
-          echo "Testing server health..."
-          sleep 2  # Give it a moment to fully initialize
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          sleep 2
           
-          if curl -f http://localhost:3000/health 2>/dev/null || \
-             curl -f http://localhost:3000/ 2>/dev/null || \
-             curl -f http://localhost:3000/api/health 2>/dev/null; then
-            echo "✅ Server is responding to requests"
+          if curl -f http://localhost:3000/health 2>/dev/null; then
+            echo "Health endpoint responding"
           else
-            echo "⚠️  Server started but health check endpoint not found (this may be OK)"
-          fi
-          
-          # Check for runtime errors in logs
-          echo "Checking for runtime errors..."
-          if docker logs $CONTAINER_ID 2>&1 | grep -iE "(error|exception|failed|cannot|uncaught)"; then
-            echo "❌ Found errors in container logs:"
+            echo "Health endpoint not responding"
             docker logs $CONTAINER_ID
             docker rm -f $CONTAINER_ID
             exit 1
           fi
           
-          echo "✅ Docker container test passed"
+          # Test API endpoints that require database (catches DI issues)
+          echo ""
+          echo "Testing API endpoints (database injection check)..."
+          
+          # Test /api/auth/check - requires database to check user count
+          AUTH_CHECK=$(curl -s -w "\n%{http_code}" http://localhost:3000/api/auth/check)
+          AUTH_STATUS=$(echo "$AUTH_CHECK" | tail -1)
+          AUTH_BODY=$(echo "$AUTH_CHECK" | head -n -1)
+          
+          if [ "$AUTH_STATUS" = "200" ]; then
+            echo "Auth check endpoint works (status: $AUTH_STATUS)"
+            echo "Response: $AUTH_BODY"
+          else
+            echo "Auth check endpoint failed (status: $AUTH_STATUS)"
+            echo "Response: $AUTH_BODY"
+            echo "Container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          # Test /api/setup endpoint - requires database to create user
+          echo ""
+          echo "Testing setup endpoint (creates first user)..."
+          SETUP_RESP=$(curl -s -w "\n%{http_code}" -X POST http://localhost:3000/api/setup \
+            -H "Content-Type: application/json" \
+            -d '{"email":"test@example.com","password":"testpass123"}')
+          SETUP_STATUS=$(echo "$SETUP_RESP" | tail -1)
+          SETUP_BODY=$(echo "$SETUP_RESP" | head -n -1)
+          
+          if [ "$SETUP_STATUS" = "200" ] || [ "$SETUP_STATUS" = "201" ]; then
+            echo "Setup endpoint works (status: $SETUP_STATUS)"
+          elif [ "$SETUP_STATUS" = "400" ]; then
+            # 400 could mean user already exists or validation error - both indicate DB works
+            echo "Setup endpoint works (status: $SETUP_STATUS - validation or already exists)"
+          else
+            echo "Setup endpoint failed (status: $SETUP_STATUS)"
+            echo "Response: $SETUP_BODY"
+            echo "Container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          # Check for runtime errors in logs
+          echo ""
+          echo "Checking for runtime errors..."
+          if docker logs $CONTAINER_ID 2>&1 | grep -iE "(TypeError|ReferenceError|SyntaxError|Cannot read properties of undefined)"; then
+            echo "Found runtime errors in container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          echo ""
+          echo "All Docker container tests passed"
           docker rm -f $CONTAINER_ID

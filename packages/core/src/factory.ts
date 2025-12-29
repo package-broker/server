@@ -113,23 +113,24 @@ export function createApp(options?: {
         );
     });
 
-    // Custom Init hook (for setting generic drivers from outer scope)
+    // Inject database and storage drivers if provided
+    // This MUST happen regardless of whether onInit is provided
+    if (options?.database) {
+        app.use('*', async (c, next) => {
+            c.set('database', options.database!);
+            await next();
+        });
+    }
+    if (options?.storage) {
+        app.use('*', async (c, next) => {
+            c.set('storage', options.storage!);
+            await next();
+        });
+    }
+
+    // Custom Init hook (for additional middleware/routes from outer scope)
     if (options?.onInit) {
         options.onInit(app);
-    } else {
-        // If drivers provided directly, inject them
-        if (options?.database) {
-            app.use('*', async (c, next) => {
-                c.set('database', options.database!);
-                await next();
-            });
-        }
-        if (options?.storage) {
-            app.use('*', async (c, next) => {
-                c.set('storage', options.storage!);
-                await next();
-            });
-        }
     }
 
     // Health check (no auth required)
