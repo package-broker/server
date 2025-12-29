@@ -34,6 +34,6 @@
     "@cloudflare/workers-types": "^4.20240125.0"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   }
 }

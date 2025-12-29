@@ -19,6 +19,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write
 
 jobs:
   # Validation job - MUST pass before any publishing
@@ -111,6 +112,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      # Publish to npmjs.org
+      - name: Setup Node.js for npmjs.org
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          always-auth: true
+
+      - name: Publish packages to npmjs.org (token)
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for pkg in shared core ui main cli adapter-node; do
+            echo "Publishing @package-broker/${pkg} to npmjs.org..."
+            (cd "packages/${pkg}" && npm publish --access public --provenance)
+          done
+
+      - name: Publish packages to npmjs.org (OIDC / Trusted Publishing)
+        if: ${{ secrets.NPM_TOKEN == '' }}
+        run: |
+          set -euo pipefail
+          for pkg in shared core ui main cli adapter-node; do
+            echo "Publishing @package-broker/${pkg} to npmjs.org via OIDC..."
+            (cd "packages/${pkg}" && npm publish --access public --provenance)
+          done
+
+      # Publish to GitHub Packages
       - name: Setup Node.js for GitHub Packages
         uses: actions/setup-node@v4
         with:
@@ -119,47 +161,15 @@ jobs:
           scope: '@package-broker'
           always-auth: true
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build all packages
-        run: npm run build
-
-      - name: Publish @package-broker/shared
-        working-directory: packages/shared
-        run: npm publish
+      - name: Publish packages to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish @package-broker/core
-        working-directory: packages/core
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish @package-broker/ui
-        working-directory: packages/ui
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish @package-broker/main
-        working-directory: packages/main
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish @package-broker/cli
-        working-directory: packages/cli
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish @package-broker/adapter-node
-        working-directory: packages/adapter-node
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for pkg in shared core ui main cli adapter-node; do
+            echo "Publishing @package-broker/${pkg} to GitHub Packages..."
+            (cd "packages/${pkg}" && npm publish)
+          done
 
   # Build and publish Docker images - only runs if validation passes
   publish-docker:
