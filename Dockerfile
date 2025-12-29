@@ -18,6 +18,8 @@ COPY packages/core ./packages/core
 COPY packages/adapter-node ./packages/adapter-node
 COPY packages/ui ./packages/ui
 COPY packages/shared ./packages/shared
+# Copy migrations directory from main package (needed for database initialization)
+COPY packages/main/migrations ./packages/main/migrations
 
 # Build packages
 RUN npm run build -w packages/shared
