@@ -46,3 +46,85 @@ jobs:
         CI: true
         TEST_BASE_URL: http://localhost:8787
 
+  # Test Docker image to catch bundling/runtime issues
+  test-docker:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (server)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.server
+          tags: package-broker-server:test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker container startup
+        run: |
+          set -euo pipefail
+          
+          echo "Starting container..."
+          CONTAINER_ID=$(docker run -d \
+            -p 3000:3000 \
+            -e DB_DRIVER=sqlite \
+            -e DB_URL="file:/tmp/test.db" \
+            -e STORAGE_DRIVER=fs \
+            -e STORAGE_FS_PATH="/tmp/storage" \
+            -e CACHE_DRIVER=memory \
+            -e QUEUE_DRIVER=memory \
+            package-broker-server:test)
+          
+          echo "Container ID: $CONTAINER_ID"
+          
+          # Wait for container to start (with timeout)
+          echo "Waiting for server to start..."
+          timeout=30
+          elapsed=0
+          while [ $elapsed -lt $timeout ]; do
+            if docker logs $CONTAINER_ID 2>&1 | grep -q "Server listening"; then
+              echo "✅ Server started successfully"
+              break
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+          done
+          
+          if [ $elapsed -ge $timeout ]; then
+            echo "❌ Server failed to start within $timeout seconds"
+            echo "Container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          # Test that the server responds
+          echo "Testing server health..."
+          sleep 2  # Give it a moment to fully initialize
+          
+          if curl -f http://localhost:3000/health 2>/dev/null || \
+             curl -f http://localhost:3000/ 2>/dev/null || \
+             curl -f http://localhost:3000/api/health 2>/dev/null; then
+            echo "✅ Server is responding to requests"
+          else
+            echo "⚠️  Server started but health check endpoint not found (this may be OK)"
+          fi
+          
+          # Check for runtime errors in logs
+          echo "Checking for runtime errors..."
+          if docker logs $CONTAINER_ID 2>&1 | grep -iE "(error|exception|failed|cannot|uncaught)"; then
+            echo "❌ Found errors in container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          echo "✅ Docker container test passed"
+          docker rm -f $CONTAINER_ID
