@@ -29,6 +29,11 @@
   "devDependencies": {
     "typescript": "^5.3.3"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/package-broker/server",
+    "directory": "packages/shared"
+  },
   "publishConfig": {
     "access": "public"
   }
