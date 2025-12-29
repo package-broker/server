@@ -132,23 +132,20 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           always-auth: true
 
-      - name: Publish packages to npmjs.org (token)
-        if: ${{ secrets.NPM_TOKEN != '' }}
+      - name: Publish packages to npmjs.org (token or OIDC)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
+
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is set; publishing to npmjs.org using token auth."
+          else
+            echo "NPM_TOKEN is not set; publishing to npmjs.org via OIDC/Trusted Publishing (must be configured on npm)."
+          fi
+
           for pkg in shared core ui main cli adapter-node; do
             echo "Publishing @package-broker/${pkg} to npmjs.org..."
-            (cd "packages/${pkg}" && npm publish --access public --provenance)
-          done
-
-      - name: Publish packages to npmjs.org (OIDC / Trusted Publishing)
-        if: ${{ secrets.NPM_TOKEN == '' }}
-        run: |
-          set -euo pipefail
-          for pkg in shared core ui main cli adapter-node; do
-            echo "Publishing @package-broker/${pkg} to npmjs.org via OIDC..."
             (cd "packages/${pkg}" && npm publish --access public --provenance)
           done
 
