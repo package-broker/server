@@ -7,8 +7,10 @@
 // Auth routes for admin login
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
 import { UserService } from '../../services/UserService';
 import { getAnalytics } from '../../utils/analytics';
+import { loginRequestSchema } from '@package-broker/shared';
 
 // Generate a session token
 function generateSessionToken(): string {
@@ -23,22 +25,12 @@ function generateSessionToken(): string {
  * POST /api/auth/login
  * Authenticate admin user and return session token
  */
-export async function loginRoute(c: Context): Promise<Response> {
+export async function loginRoute(c: OpenAPIContext<any, ReturnType<typeof loginRequestSchema.parse>>): Promise<Response> {
   const db = c.get('database');
   const userService = new UserService(db);
 
-  let body;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: 'Invalid JSON' }, 400);
-  }
-
+  const body = c.req.valid('json');
   const { email, password } = body;
-
-  if (!email || !password) {
-    return c.json({ error: 'Email and password required' }, 400);
-  }
 
   const user = await userService.verifyCredentials(email, password);
   const requestId = c.get('requestId') as string | undefined;
@@ -110,7 +102,7 @@ export async function loginRoute(c: Context): Promise<Response> {
  * POST /api/auth/logout
  * Invalidate session token
  */
-export async function logoutRoute(c: Context): Promise<Response> {
+export async function logoutRoute(c: OpenAPIContext): Promise<Response> {
   const authHeader = c.req.header('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
@@ -321,15 +313,14 @@ export async function sessionMiddleware(c: Context, next: () => Promise<void>): 
 /**
  * Check if auth is required / setup is needed
  */
-export async function checkAuthRequired(c: Context): Promise<Response> {
+export async function checkAuthRequired(c: OpenAPIContext): Promise<Response> {
   const db = c.get('database');
   const userService = new UserService(db);
 
   const count = await userService.count();
 
   return c.json({
-    authRequired: true,
-    setupRequired: count === 0
+    auth_required: count > 0,
   });
 }
 

@@ -1,6 +1,7 @@
 // Artifacts API routes
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
 import type { DatabasePort } from '../../ports';
 import { artifacts } from '../../db/schema';
 import { eq, lt } from 'drizzle-orm';
@@ -22,8 +23,8 @@ export interface ArtifactsRouteEnv {
  * DELETE /api/artifacts/:id
  * Delete an artifact (from storage and database)
  */
-export async function deleteArtifact(c: Context<ArtifactsRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
+export async function deleteArtifact(c: OpenAPIContext<ArtifactsRouteEnv>): Promise<Response> {
+  const { id } = c.req.valid('param');
   const db = c.get('database');
 
   // Get artifact to find storage key
@@ -48,8 +49,8 @@ export async function deleteArtifact(c: Context<ArtifactsRouteEnv>): Promise<Res
  * Clean up old artifacts (on-demand cleanup)
  * Deletes artifacts where last_downloaded_at is older than retention_days
  */
-export async function cleanupArtifacts(c: Context<ArtifactsRouteEnv>): Promise<Response> {
-  const body = await c.req.json();
+export async function cleanupArtifacts(c: OpenAPIContext<ArtifactsRouteEnv, { retention_days?: number }>): Promise<Response> {
+  const body = c.req.valid('json');
   const retentionDays = body.retention_days ?? 90; // Default 90 days
   const cutoffTimestamp = Math.floor(Date.now() / 1000) - retentionDays * 24 * 60 * 60;
 

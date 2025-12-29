@@ -1,5 +1,5 @@
 
-import { Hono } from 'hono';
+import { OpenAPIHono } from '@hono/zod-openapi';
 import { cors } from 'hono/cors';
 import {
     composerVersionMiddleware,
@@ -54,6 +54,37 @@ import {
     type DatabasePort,
     type CachePort,
 } from './index';
+import {
+    healthRouteDef,
+    loginRouteDef,
+    logoutRouteDef,
+    meRouteDef,
+    checkAuthRequiredRouteDef,
+    listUsersRouteDef,
+    createUserRouteDef,
+    deleteUserRouteDef,
+    listRepositoriesRouteDef,
+    createRepositoryRouteDef,
+    getRepositoryRouteDef,
+    updateRepositoryRouteDef,
+    deleteRepositoryRouteDef,
+    verifyRepositoryRouteDef,
+    syncRepositoryRouteDef,
+    listTokensRouteDef,
+    createTokenRouteDef,
+    updateTokenRouteDef,
+    deleteTokenRouteDef,
+    listPackagesRouteDef,
+    getPackageRouteDef,
+    getPackageReadmeRouteDef,
+    getPackageChangelogRouteDef,
+    getStatsRouteDef,
+    getPackageStatsRouteDef,
+    getSettingsRouteDef,
+    updatePackagistMirroringRouteDef,
+    deleteArtifactRouteDef,
+    cleanupArtifactsRouteDef,
+} from './routes/api/openapi';
 
 // Generic Environment Interface
 export interface AppBindings {
@@ -75,7 +106,7 @@ export interface AppVariables {
     session?: { userId: string; email: string };
 }
 
-export type AppInstance = Hono<{ Bindings: AppBindings; Variables: AppVariables }>;
+export type AppInstance = OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>;
 
 /**
  * Create the generic Hono application
@@ -88,7 +119,7 @@ export function createApp(options?: {
     cache?: CachePort;
     onInit?: (app: AppInstance) => void;
 }): AppInstance {
-    const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
+    const app = new OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>();
     const logger = getLogger('info'); // Default logger, can vary per request if needed
 
     // Global middleware
@@ -119,7 +150,7 @@ export function createApp(options?: {
     // Inject database, storage, and cache drivers if provided
     // This MUST happen regardless of whether onInit is provided
     if (options?.database) {
-        app.use('*', async (c, next) => {
+        app.use('*', async (c: any, next: any) => {
             c.set('database', options.database!);
             await next();
         });
@@ -131,7 +162,7 @@ export function createApp(options?: {
         });
     }
     if (options?.cache) {
-        app.use('*', async (c, next) => {
+        app.use('*', async (c: any, next: any) => {
             c.set('cache', options.cache!);
             await next();
         });
@@ -143,19 +174,19 @@ export function createApp(options?: {
     }
 
     // Health check (no auth required)
-    app.get('/health', healthRoute);
+    app.openapi(healthRouteDef, healthRoute as any);;
 
     // API routes
-    const apiRoutes = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
+    const apiRoutes = new OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>();
 
     // Auth routes (no session required)
-    apiRoutes.post('/auth/login', loginRoute);
-    apiRoutes.get('/auth/check', checkAuthRequired);
-    apiRoutes.post('/setup', setupRoute); /* Fresh install flow */
-    apiRoutes.post('/auth/invite/accept', acceptInviteRoute);
+    apiRoutes.openapi(loginRouteDef, loginRoute as any);
+    apiRoutes.openapi(checkAuthRequiredRouteDef, checkAuthRequired as any);
+    apiRoutes.post('/setup', setupRoute); /* Fresh install flow - not in OpenAPI yet */
+    apiRoutes.post('/auth/invite/accept', acceptInviteRoute); /* Not in OpenAPI yet */
 
     // Protected routes - require session
-    const protectedRoutes = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
+    const protectedRoutes = new OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>();
 
     // ** SESSION MIDDLEWARE **
     protectedRoutes.use('*', async (c, next) => {
@@ -163,55 +194,112 @@ export function createApp(options?: {
     });
 
     // Auth routes (session required)
-    protectedRoutes.post('/auth/logout', logoutRoute);
-    protectedRoutes.get('/auth/me', meRoute);
-    protectedRoutes.post('/auth/2fa/setup', setup2FARoute);
-    protectedRoutes.post('/auth/2fa/enable', enable2FARoute);
-    protectedRoutes.post('/auth/2fa/disable', disable2FARoute);
+    protectedRoutes.openapi(logoutRouteDef, logoutRoute as any);
+    protectedRoutes.openapi(meRouteDef, meRoute as any);
+    protectedRoutes.post('/auth/2fa/setup', setup2FARoute); /* Not in OpenAPI yet */
+    protectedRoutes.post('/auth/2fa/enable', enable2FARoute); /* Not in OpenAPI yet */
+    protectedRoutes.post('/auth/2fa/disable', disable2FARoute); /* Not in OpenAPI yet */
 
     // User Management
-    protectedRoutes.get('/users', listUsers);
-    protectedRoutes.post('/users', createUser);
-    protectedRoutes.delete('/users/:id', deleteUser);
+    protectedRoutes.openapi(listUsersRouteDef, listUsers as any);
+    protectedRoutes.openapi(createUserRouteDef, createUser as any);
+    protectedRoutes.openapi(deleteUserRouteDef, deleteUser as any);
 
     // Repository routes
-    protectedRoutes.get('/repositories', listRepositories);
-    protectedRoutes.post('/repositories', createRepository);
-    protectedRoutes.get('/repositories/:id', getRepository);
-    protectedRoutes.put('/repositories/:id', updateRepository);
-    protectedRoutes.delete('/repositories/:id', deleteRepository);
-    protectedRoutes.get('/repositories/:id/verify', verifyRepository);
-    protectedRoutes.post('/repositories/:id/sync', syncRepositoryNow);
+    protectedRoutes.openapi(listRepositoriesRouteDef, listRepositories as any);
+    protectedRoutes.openapi(createRepositoryRouteDef, createRepository as any);
+    protectedRoutes.openapi(getRepositoryRouteDef, getRepository as any);
+    protectedRoutes.openapi(updateRepositoryRouteDef, updateRepository as any);
+    protectedRoutes.openapi(deleteRepositoryRouteDef, deleteRepository as any);
+    protectedRoutes.openapi(verifyRepositoryRouteDef, verifyRepository as any);
+    protectedRoutes.openapi(syncRepositoryRouteDef, syncRepositoryNow as any);
 
     // Token routes
-    protectedRoutes.get('/tokens', listTokens);
-    protectedRoutes.post('/tokens', createToken);
-    protectedRoutes.patch('/tokens/:id', updateToken);
-    protectedRoutes.delete('/tokens/:id', deleteToken);
+    protectedRoutes.openapi(listTokensRouteDef, listTokens as any);
+    protectedRoutes.openapi(createTokenRouteDef, createToken as any);
+    protectedRoutes.openapi(updateTokenRouteDef, updateToken as any);
+    protectedRoutes.openapi(deleteTokenRouteDef, deleteToken as any);
 
     // Package routes
-    protectedRoutes.get('/packages', listPackages);
-    protectedRoutes.get('/packages/:name', getPackage);
-    protectedRoutes.get('/packages/:name/:version/readme', getPackageReadme);
-    protectedRoutes.get('/packages/:name/:version/changelog', getPackageChangelog);
-    protectedRoutes.get('/packages/:name/:version/stats', getPackageStats);
-    protectedRoutes.post('/packages/add-from-mirror', addPackagesFromMirror);
+    protectedRoutes.openapi(listPackagesRouteDef, listPackages as any);
+    protectedRoutes.openapi(getPackageRouteDef, getPackage as any);
+    protectedRoutes.openapi(getPackageReadmeRouteDef, getPackageReadme as any);
+    protectedRoutes.openapi(getPackageChangelogRouteDef, getPackageChangelog as any);
+    protectedRoutes.openapi(getPackageStatsRouteDef, getPackageStats as any);
+    protectedRoutes.post('/packages/add-from-mirror', addPackagesFromMirror); /* Not in OpenAPI yet */
 
     // Stats
-    protectedRoutes.get('/stats', getStats);
+    protectedRoutes.openapi(getStatsRouteDef, getStats as any);
 
     // Settings
-    protectedRoutes.get('/settings', getSettings);
-    protectedRoutes.put('/settings/packagist-mirroring', updatePackagistMirroring);
+    protectedRoutes.openapi(getSettingsRouteDef, getSettings as any);
+    protectedRoutes.openapi(updatePackagistMirroringRouteDef, updatePackagistMirroring as any);
 
     // Artifacts
-    protectedRoutes.delete('/artifacts/:id', deleteArtifact);
-    protectedRoutes.post('/artifacts/cleanup', cleanupArtifacts);
-    protectedRoutes.post('/packages/cleanup-numeric-versions', cleanupNumericVersions);
+    protectedRoutes.openapi(deleteArtifactRouteDef, deleteArtifact as any);
+    protectedRoutes.openapi(cleanupArtifactsRouteDef, cleanupArtifacts as any);
+    protectedRoutes.post('/packages/cleanup-numeric-versions', cleanupNumericVersions); /* Not in OpenAPI yet */
 
     // Mount protected routes under /api
     apiRoutes.route('/', protectedRoutes);
     app.route('/api', apiRoutes);
+
+    // OpenAPI documentation endpoints
+    app.doc('/api/openapi.json', {
+        openapi: '3.0.0',
+        info: {
+            version: '1.0.0',
+            title: 'PACKAGE.broker API',
+            description: 'REST API for PACKAGE.broker - Composer Package Mirror',
+        },
+        servers: [
+            {
+                url: '/',
+                description: 'Current server',
+            },
+        ],
+    } as any);
+
+    // Swagger UI endpoint (using CDN)
+    app.get('/api/swagger', (c) => {
+        return c.html(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PACKAGE.broker API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
+    <style>
+        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { margin:0; background: #fafafa; }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            window.ui = SwaggerUIBundle({
+                url: '/api/openapi.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+            });
+        };
+    </script>
+</body>
+</html>
+        `);
+    });
 
     // Composer routes
     const composerAuth = async (c: any, next: any) => {

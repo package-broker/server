@@ -1,6 +1,7 @@
 // Packages API routes
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
 import type { DatabasePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
 import { eq, like, and } from 'drizzle-orm';
@@ -30,9 +31,10 @@ export interface PackagesRouteEnv {
  * GET /api/packages
  * List all packages (with optional search)
  */
-export async function listPackages(c: Context<PackagesRouteEnv>): Promise<Response> {
+export async function listPackages(c: OpenAPIContext<PackagesRouteEnv, any, any, { search?: string }>): Promise<Response> {
   const db = c.get('database');
-  const search = c.req.query('search');
+  const query = c.req.valid('query');
+  const search = query?.search;
 
   let allPackages;
   if (search) {
@@ -52,8 +54,8 @@ export async function listPackages(c: Context<PackagesRouteEnv>): Promise<Respon
  * GET /api/packages/:name
  * Get a single package with all versions
  */
-export async function getPackage(c: Context<PackagesRouteEnv>): Promise<Response> {
-  const nameParam = c.req.param('name');
+export async function getPackage(c: OpenAPIContext<PackagesRouteEnv>): Promise<Response> {
+  const { name: nameParam } = c.req.valid('param');
   // Decode URL-encoded package name (handles slashes like amasty/cron-schedule-list)
   const name = decodeURIComponent(nameParam);
   const db = c.get('database');
@@ -153,9 +155,8 @@ function extractChangelog(zipData: Uint8Array): string | null {
  * Get README.md content for a specific package version
  * Uses R2/S3 storage instead of KV for better scalability
  */
-export async function getPackageReadme(c: Context<PackagesRouteEnv>): Promise<Response> {
-  const nameParam = c.req.param('name');
-  const version = c.req.param('version');
+export async function getPackageReadme(c: OpenAPIContext<PackagesRouteEnv>): Promise<Response> {
+  const { name: nameParam, version } = c.req.valid('param');
   // Decode URL-encoded package name (handles slashes like amasty/cron-schedule-list)
   const name = decodeURIComponent(nameParam);
 
@@ -438,9 +439,8 @@ export async function getPackageReadme(c: Context<PackagesRouteEnv>): Promise<Re
  * Get CHANGELOG.md content for a specific package version
  * Uses R2/S3 storage instead of KV for better scalability
  */
-export async function getPackageChangelog(c: Context<PackagesRouteEnv>): Promise<Response> {
-  const nameParam = c.req.param('name');
-  const version = c.req.param('version');
+export async function getPackageChangelog(c: OpenAPIContext<PackagesRouteEnv>): Promise<Response> {
+  const { name: nameParam, version } = c.req.valid('param');
   // Decode URL-encoded package name (handles slashes like amasty/cron-schedule-list)
   const name = decodeURIComponent(nameParam);
 

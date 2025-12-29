@@ -7,10 +7,11 @@
 // Token API routes
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
+import { createTokenSchema, updateTokenSchema } from '@package-broker/shared';
 import type { DatabasePort } from '../../ports';
 import { tokens } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { createTokenSchema, updateTokenSchema } from '@package-broker/shared';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { nanoid, customAlphabet } from 'nanoid';
@@ -50,7 +51,7 @@ function isKvAvailableForRateLimiting(kv: KVNamespace | undefined): boolean {
  * GET /api/tokens
  * List all tokens (without exposing actual tokens)
  */
-export async function listTokens(c: Context<TokensRouteEnv>): Promise<Response> {
+export async function listTokens(c: OpenAPIContext<TokensRouteEnv>): Promise<Response> {
   const db = c.get('database');
   const allTokens = await db.select().from(tokens).orderBy(tokens.created_at);
 
@@ -72,9 +73,8 @@ export async function listTokens(c: Context<TokensRouteEnv>): Promise<Response> 
  * Create a new token
  * Returns the token ONCE - it cannot be retrieved again
  */
-export async function createToken(c: Context<TokensRouteEnv>): Promise<Response> {
-  const body = await c.req.json();
-  const validated = createTokenSchema.parse(body);
+export async function createToken(c: OpenAPIContext<TokensRouteEnv, ReturnType<typeof createTokenSchema.parse>>): Promise<Response> {
+  const validated = c.req.valid('json');
 
   // Validate: rate limiting requires KV
   if (validated.rate_limit_max !== null &&
@@ -137,8 +137,8 @@ export async function createToken(c: Context<TokensRouteEnv>): Promise<Response>
  * DELETE /api/tokens/:id
  * Revoke a token
  */
-export async function deleteToken(c: Context<TokensRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
+export async function deleteToken(c: OpenAPIContext<TokensRouteEnv>): Promise<Response> {
+  const { id } = c.req.valid('param');
   const db = c.get('database');
 
   // Check if exists
@@ -168,10 +168,9 @@ export async function deleteToken(c: Context<TokensRouteEnv>): Promise<Response>
  * Update token description and/or rate_limit_max
  * Permissions cannot be changed after creation
  */
-export async function updateToken(c: Context<TokensRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
-  const body = await c.req.json();
-  const validated = updateTokenSchema.parse(body);
+export async function updateToken(c: OpenAPIContext<TokensRouteEnv, ReturnType<typeof updateTokenSchema.parse>>): Promise<Response> {
+  const { id } = c.req.valid('param');
+  const validated = c.req.valid('json');
 
   // Validate: rate limiting requires KV
   if (validated.rate_limit_max !== null &&

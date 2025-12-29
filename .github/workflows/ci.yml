@@ -46,6 +46,27 @@ jobs:
         CI: true
         TEST_BASE_URL: http://localhost:8787
 
+    - name: Validate OpenAPI Spec
+      run: |
+        npm run dev &
+        SERVER_PID=$!
+        sleep 15
+        curl -f http://localhost:8787/api/openapi.json -o openapi.json || (kill $SERVER_PID && exit 1)
+        npx @apidevtools/swagger-cli validate openapi.json || (kill $SERVER_PID && exit 1)
+        kill $SERVER_PID || true
+      continue-on-error: false
+
+    - name: Test API Contract
+      run: |
+        npm run dev &
+        SERVER_PID=$!
+        sleep 15
+        node scripts/validate-api-contract.mjs || (kill $SERVER_PID && exit 1)
+        kill $SERVER_PID || true
+      env:
+        API_URL: http://localhost:8787
+      continue-on-error: false
+
   # Test Docker image to catch bundling/runtime issues
   test-docker:
     name: Test Docker Image
