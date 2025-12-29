@@ -123,7 +123,7 @@ jobs:
           CONTAINER_ID=$(docker run -d \
             -p 3000:3000 \
             -e DB_DRIVER=sqlite \
-            -e DB_URL="file:/tmp/test.db" \
+            -e DB_URL="/tmp/test.db" \
             -e STORAGE_DRIVER=fs \
             -e STORAGE_FS_PATH="/tmp/storage" \
             -e CACHE_DRIVER=memory \
