@@ -65,6 +65,14 @@ export async function createRepository(c: Context<RepositoriesRouteEnv>): Promis
   const body = await c.req.json();
   const validated = createRepositorySchema.parse(body);
 
+  // Validate ENCRYPTION_KEY is configured
+  if (!c.env.ENCRYPTION_KEY || typeof c.env.ENCRYPTION_KEY !== 'string') {
+    return c.json(
+      { error: 'Internal Server Error', message: 'Server configuration error: ENCRYPTION_KEY is not set' },
+      500
+    );
+  }
+
   // Encrypt credentials
   const encryptedCredentials = await encryptCredentials(
     JSON.stringify(validated.auth_credentials),
@@ -222,6 +230,13 @@ export async function updateRepository(c: Context<RepositoriesRouteEnv>): Promis
     updateData.credential_type = validated.credential_type;
   }
   if (validated.auth_credentials !== undefined) {
+    // Validate ENCRYPTION_KEY is configured
+    if (!c.env.ENCRYPTION_KEY || typeof c.env.ENCRYPTION_KEY !== 'string') {
+      return c.json(
+        { error: 'Internal Server Error', message: 'Server configuration error: ENCRYPTION_KEY is not set' },
+        500
+      );
+    }
     // Encrypt new credentials
     updateData.auth_credentials = await encryptCredentials(
       JSON.stringify(validated.auth_credentials),

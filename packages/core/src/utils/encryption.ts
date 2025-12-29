@@ -19,6 +19,11 @@ export async function encryptCredentials(
   data: string,
   key: string
 ): Promise<string> {
+  // Validate key parameter
+  if (!key || typeof key !== 'string') {
+    throw new Error('ENCRYPTION_KEY is not configured. Please set the ENCRYPTION_KEY environment variable.');
+  }
+
   const encoder = new TextEncoder();
   const dataBuffer = encoder.encode(data);
 
@@ -79,6 +84,11 @@ export async function decryptCredentials(
   encryptedData: string,
   key: string
 ): Promise<string> {
+  // Validate key parameter
+  if (!key || typeof key !== 'string') {
+    throw new Error('ENCRYPTION_KEY is not configured. Please set the ENCRYPTION_KEY environment variable.');
+  }
+
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
 
