@@ -106,7 +106,7 @@ jobs:
   publish-packages:
     name: Publish NPM Packages
     needs: validate
-    if: ${{ !inputs.skip_validation || github.event_name == 'push' }}
+    if: ${{ inputs.skip_validation != 'true' && inputs.skip_validation != true || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -174,7 +174,7 @@ jobs:
   publish-docker:
     name: Build and Publish Docker Images
     needs: validate
-    if: ${{ !inputs.skip_validation || github.event_name == 'push' }}
+    if: ${{ inputs.skip_validation != 'true' && inputs.skip_validation != true || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -266,7 +266,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     needs: [validate, publish-packages, publish-docker]
-    if: ${{ !inputs.skip_validation || github.event_name == 'push' }}
+    if: ${{ inputs.skip_validation != 'true' && inputs.skip_validation != true || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
