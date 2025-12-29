@@ -27,12 +27,13 @@ const firstLines = content.split('\n').slice(0, 20).join('\n');
 const hasCreateRequireImport = firstLines.includes("import { createRequire }") || 
                                firstLines.includes('import { createRequire }');
 
-// Use dynamic import to avoid duplicate import issues
-// This will work even if createRequire is imported elsewhere in the bundle
-const shimCode = `// Require shim for ESM context (injected by post-build script)
-// This allows CommonJS dependencies bundled by tsup to use require() for Node.js built-ins
+// Use synchronous import to set up require BEFORE any other code runs
+// This must execute synchronously because bundled chunks use require() during module loading
+const shimCode = `import { createRequire } from 'module';
+// Require shim for ESM context (injected by post-build script)
+// This must be set up synchronously before any imports execute
+// because bundled CommonJS dependencies use require() during module loading
 if (typeof globalThis.require === 'undefined') {
-  const { createRequire } = await import('module');
   globalThis.require = createRequire(import.meta.url);
 }
 `;

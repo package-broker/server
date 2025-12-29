@@ -27,8 +27,14 @@ export default defineConfig({
     external: nodeBuiltins,
     clean: true,
     esbuildPlugins: [cloudflarePlugin],
-    // Note: We don't add a banner here because dependencies already handle
-    // their own require() shims. The external: nodeBuiltins ensures Node.js
-    // built-ins are not bundled, allowing require() calls to work.
-    // If a dependency needs require(), it should provide its own shim.
+    // Inject require shim into ALL output files (entry + chunks)
+    // This is necessary because chunks use require() during module loading
+    banner: {
+        js: `
+import { createRequire } from 'module';
+if (typeof globalThis.require === 'undefined') {
+  globalThis.require = createRequire(import.meta.url);
+}
+`.trim(),
+    },
 });

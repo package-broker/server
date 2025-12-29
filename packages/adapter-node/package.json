@@ -7,7 +7,7 @@
     "lint": "echo 'no linting configured'",
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/index.ts",
-    "build": "tsup && node scripts/inject-require-shim.js",
+    "build": "tsup",
     "start": "node dist/index.js",
     "clean": "rm -rf dist"
   },
