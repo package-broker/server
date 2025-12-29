@@ -102,6 +102,79 @@ jobs:
           echo "✅ All package versions match tag: $TAG_VERSION"
         continue-on-error: false
 
+      - name: Test Docker image (smoke test)
+        run: |
+          set -euo pipefail
+          
+          echo "Building and testing Docker image to catch bundling/runtime issues..."
+          
+          # Set up Docker Buildx
+          docker buildx create --use --name test-builder || true
+          
+          # Build the image
+          docker buildx build \
+            --load \
+            --tag package-broker-server:test \
+            --file ./Dockerfile.server \
+            .
+          
+          # Test container startup
+          echo "Starting container..."
+          CONTAINER_ID=$(docker run -d \
+            -p 3000:3000 \
+            -e DB_DRIVER=sqlite \
+            -e DB_URL="file:/tmp/test.db" \
+            -e STORAGE_DRIVER=fs \
+            -e STORAGE_FS_PATH="/tmp/storage" \
+            -e CACHE_DRIVER=memory \
+            -e QUEUE_DRIVER=memory \
+            package-broker-server:test)
+          
+          echo "Container ID: $CONTAINER_ID"
+          
+          # Wait for container to start (with timeout)
+          echo "Waiting for server to start..."
+          timeout=30
+          elapsed=0
+          while [ $elapsed -lt $timeout ]; do
+            if docker logs $CONTAINER_ID 2>&1 | grep -q "Server listening"; then
+              echo "✅ Server started successfully"
+              break
+            fi
+            # Check for fatal errors
+            if docker logs $CONTAINER_ID 2>&1 | grep -iE "(SyntaxError|Error:|Cannot|Dynamic require)"; then
+              echo "❌ Fatal error detected in container logs:"
+              docker logs $CONTAINER_ID
+              docker rm -f $CONTAINER_ID
+              exit 1
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+          done
+          
+          if [ $elapsed -ge $timeout ]; then
+            echo "❌ Server failed to start within $timeout seconds"
+            echo "Container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          # Check for runtime errors in logs
+          echo "Checking for runtime errors..."
+          sleep 2  # Give it a moment to fully initialize
+          
+          if docker logs $CONTAINER_ID 2>&1 | grep -iE "(error|exception|failed|cannot|uncaught|SyntaxError|TypeError)" | grep -v "WARN"; then
+            echo "❌ Found errors in container logs:"
+            docker logs $CONTAINER_ID
+            docker rm -f $CONTAINER_ID
+            exit 1
+          fi
+          
+          echo "✅ Docker container test passed - bundled code runs correctly"
+          docker rm -f $CONTAINER_ID
+        continue-on-error: false
+
   # Publish packages - only runs if validation passes
   publish-packages:
     name: Publish NPM Packages
