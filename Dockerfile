@@ -41,6 +41,9 @@ COPY --from=builder /app/packages/core/dist ./packages/core/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/adapter-node/dist ./packages/adapter-node/dist
 COPY --from=builder /app/packages/ui/dist ./public
+# Copy migration files and migration script for database initialization
+COPY --from=builder /app/packages/main/migrations ./packages/main/migrations
+COPY --from=builder /app/packages/adapter-node/scripts/migrate.cjs ./packages/adapter-node/scripts/migrate.cjs
 
 EXPOSE 3000
 
