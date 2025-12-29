@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { createApp } from '@package-broker/core';
+import { createApp, generateEncryptionKey } from '@package-broker/core';
 import { config } from 'dotenv';
 import { SqliteDriver } from './drivers/sqlite-driver.js';
 import { FileSystemDriver } from './drivers/fs-driver.js';
@@ -85,11 +85,33 @@ async function start() {
         queue = new MemoryQueueDriver();
     }
 
+    // Get or generate ENCRYPTION_KEY
+    let encryptionKey = process.env.ENCRYPTION_KEY;
+    if (!encryptionKey) {
+        console.warn('');
+        console.warn('⚠️  ENCRYPTION_KEY not set - generating a temporary key for this session');
+        console.warn('   ⚠️  WARNING: This key will change on restart. Set ENCRYPTION_KEY for production!');
+        console.warn('   📖 See: https://package.broker/docs/reference/configuration');
+        console.warn('');
+        encryptionKey = await generateEncryptionKey();
+    }
+
     // Create App
     const app = createApp({
         database,
         storage,
         cache,
+        onInit: (app) => {
+            // Inject environment variables into c.env for Node.js adapter
+            app.use('*', async (c, next) => {
+                // Make c.env available and populate from process.env
+                (c.env as any) = {
+                    ...(c.env || {}),
+                    ENCRYPTION_KEY: encryptionKey,
+                };
+                await next();
+            });
+        },
     });
 
     // Serve config.js dynamically
