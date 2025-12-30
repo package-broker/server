@@ -26,12 +26,12 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@package-broker/core": "*",
-    "@package-broker/ui": "*"
+    "@package-broker/core": "^0.9.0",
+    "@package-broker/ui": "^0.9.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "@cloudflare/workers-types": "^4.20240125.0"
+    "@cloudflare/workers-types": "^4.20251230.0",
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",

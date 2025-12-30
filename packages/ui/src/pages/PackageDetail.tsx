@@ -330,29 +330,30 @@ export function PackageDetail() {
                   {!readmeExpanded && (
                     <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
                   )}
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    className="markdown-content"
-                    components={{
-                      a: ({ node, ...props }) => (
-                        <a {...props} className="text-primary-400 hover:text-primary-300" target="_blank" rel="noopener noreferrer" />
-                      ),
-                      code: ({ node, className, children, ...props }: any) => {
-                        const isInline = !className;
-                        return isInline ? (
-                          <code className="px-1.5 py-0.5 bg-slate-800 rounded text-sm text-primary-300" {...props}>
-                            {children}
-                          </code>
-                        ) : (
-                          <code className="block p-4 bg-slate-900 rounded-lg overflow-x-auto text-sm" {...props}>
-                            {children}
-                          </code>
-                        );
-                      },
-                    }}
-                  >
-                    {readme}
-                  </ReactMarkdown>
+                  <div className="markdown-content">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a {...props} className="text-primary-400 hover:text-primary-300" target="_blank" rel="noopener noreferrer" />
+                        ),
+                        code: ({ node, className, children, ...props }: any) => {
+                          const isInline = !className;
+                          return isInline ? (
+                            <code className="px-1.5 py-0.5 bg-slate-800 rounded text-sm text-primary-300" {...props}>
+                              {children}
+                            </code>
+                          ) : (
+                            <code className="block p-4 bg-slate-900 rounded-lg overflow-x-auto text-sm" {...props}>
+                              {children}
+                            </code>
+                          );
+                        },
+                      }}
+                    >
+                      {readme}
+                    </ReactMarkdown>
+                  </div>
                 </div>
                 {!readmeExpanded && (
                   <button
@@ -395,29 +396,30 @@ export function PackageDetail() {
                     {!changelogExpanded && (
                       <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
                     )}
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      className="markdown-content"
-                      components={{
-                        a: ({ node, ...props }) => (
-                          <a {...props} className="text-primary-400 hover:text-primary-300" target="_blank" rel="noopener noreferrer" />
-                        ),
-                        code: ({ node, className, children, ...props }: any) => {
-                          const isInline = !className;
-                          return isInline ? (
-                            <code className="px-1.5 py-0.5 bg-slate-800 rounded text-sm text-primary-300" {...props}>
-                              {children}
-                            </code>
-                          ) : (
-                            <code className="block p-4 bg-slate-900 rounded-lg overflow-x-auto text-sm" {...props}>
-                              {children}
-                            </code>
-                          );
-                        },
-                      }}
-                    >
-                      {changelog}
-                    </ReactMarkdown>
+                    <div className="markdown-content">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ node, ...props }) => (
+                            <a {...props} className="text-primary-400 hover:text-primary-300" target="_blank" rel="noopener noreferrer" />
+                          ),
+                          code: ({ node, className, children, ...props }: any) => {
+                            const isInline = !className;
+                            return isInline ? (
+                              <code className="px-1.5 py-0.5 bg-slate-800 rounded text-sm text-primary-300" {...props}>
+                                {children}
+                              </code>
+                            ) : (
+                              <code className="block p-4 bg-slate-900 rounded-lg overflow-x-auto text-sm" {...props}>
+                                {children}
+                              </code>
+                            );
+                          },
+                        }}
+                      >
+                        {changelog}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                   {!changelogExpanded && (
                     <button
