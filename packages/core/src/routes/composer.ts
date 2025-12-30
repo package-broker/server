@@ -12,7 +12,7 @@ import { repositories, packages } from '../db/schema';
 import { eq, and, inArray, or } from 'drizzle-orm';
 import { createJobProcessor, type Job } from '../jobs/processor';
 import type { StorageDriver } from '../storage/driver';
-import { isPackagistMirroringEnabled, isPackageCachingEnabled } from './api/settings';
+import { isPackagistMirroringEnabled, isPackageCachingEnabled } from '../modules/admin';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { nanoid } from 'nanoid';
 import { encryptCredentials } from '../utils/encryption';

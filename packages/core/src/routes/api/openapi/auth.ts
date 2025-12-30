@@ -14,7 +14,7 @@ import {
 
 export const loginRouteDef = createRoute({
   method: 'post',
-  path: '/api/auth/login',
+  path: '/auth/login',
   summary: 'Authenticate user',
   description: 'Authenticate admin user and return session token',
   request: {
@@ -67,7 +67,7 @@ export const loginRouteDef = createRoute({
 
 export const logoutRouteDef = createRoute({
   method: 'post',
-  path: '/api/auth/logout',
+  path: '/auth/logout',
   summary: 'Logout user',
   description: 'Invalidate session token',
   security: [{ Bearer: [] }],
@@ -88,7 +88,7 @@ export const logoutRouteDef = createRoute({
 
 export const meRouteDef = createRoute({
   method: 'get',
-  path: '/api/auth/me',
+  path: '/auth/me',
   summary: 'Get current user',
   description: 'Get current authenticated user information',
   security: [{ Bearer: [] }],
@@ -125,7 +125,7 @@ export const meRouteDef = createRoute({
 
 export const checkAuthRequiredRouteDef = createRoute({
   method: 'get',
-  path: '/api/auth/check',
+  path: '/auth/check',
   summary: 'Check if authentication is required',
   description: 'Check if the instance requires authentication',
   responses: {

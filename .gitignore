@@ -42,3 +42,4 @@ packages/core/drizzle/
 
 # Local npm cache (used by CI/sandbox workarounds)
 .npm-cache/
+package-broker-data/

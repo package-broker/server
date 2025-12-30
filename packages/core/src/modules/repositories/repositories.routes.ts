@@ -13,9 +13,10 @@ import {
   errorResponseSchema,
 } from '@package-broker/shared';
 
+// Route paths are relative to module mount at /api/repositories
 export const listRepositoriesRouteDef = createRoute({
   method: 'get',
-  path: '/repositories',
+  path: '/',
   summary: 'List repositories',
   description: 'List all repositories',
   security: [{ Bearer: [] }],
@@ -34,7 +35,7 @@ export const listRepositoriesRouteDef = createRoute({
 
 export const createRepositoryRouteDef = createRoute({
   method: 'post',
-  path: '/repositories',
+  path: '/',
   summary: 'Create repository',
   description: 'Create a new repository',
   security: [{ Bearer: [] }],
@@ -78,13 +79,18 @@ export const createRepositoryRouteDef = createRoute({
 
 export const getRepositoryRouteDef = createRoute({
   method: 'get',
-  path: '/repositories/{id}',
+  path: '/{id}',
   summary: 'Get repository',
   description: 'Get a single repository by ID',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {
@@ -110,13 +116,18 @@ export const getRepositoryRouteDef = createRoute({
 
 export const updateRepositoryRouteDef = createRoute({
   method: 'put',
-  path: '/repositories/{id}',
+  path: '/{id}',
   summary: 'Update repository',
   description: 'Update a repository',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
     body: {
       content: {
@@ -149,13 +160,18 @@ export const updateRepositoryRouteDef = createRoute({
 
 export const deleteRepositoryRouteDef = createRoute({
   method: 'delete',
-  path: '/repositories/{id}',
+  path: '/{id}',
   summary: 'Delete repository',
   description: 'Delete a repository',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {
@@ -183,13 +199,18 @@ export const deleteRepositoryRouteDef = createRoute({
 
 export const verifyRepositoryRouteDef = createRoute({
   method: 'get',
-  path: '/repositories/{id}/verify',
+  path: '/{id}/verify',
   summary: 'Verify repository',
   description: 'Verify repository connection and credentials',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {
@@ -218,13 +239,18 @@ export const verifyRepositoryRouteDef = createRoute({
 
 export const syncRepositoryRouteDef = createRoute({
   method: 'post',
-  path: '/repositories/{id}/sync',
+  path: '/{id}/sync',
   summary: 'Sync repository',
   description: 'Trigger immediate repository synchronization',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {

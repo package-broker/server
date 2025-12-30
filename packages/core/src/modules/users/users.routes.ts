@@ -13,9 +13,10 @@ import {
   errorResponseSchema,
 } from '@package-broker/shared';
 
+// Route paths are relative to module mount at /api/users
 export const listUsersRouteDef = createRoute({
   method: 'get',
-  path: '/users',
+  path: '/',
   summary: 'List all users',
   description: 'List all users (admin only)',
   security: [{ Bearer: [] }],
@@ -42,7 +43,7 @@ export const listUsersRouteDef = createRoute({
 
 export const createUserRouteDef = createRoute({
   method: 'post',
-  path: '/users',
+  path: '/',
   summary: 'Create user',
   description: 'Create a new user (admin only)',
   security: [{ Bearer: [] }],
@@ -94,13 +95,18 @@ export const createUserRouteDef = createRoute({
 
 export const deleteUserRouteDef = createRoute({
   method: 'delete',
-  path: '/users/{id}',
+  path: '/{id}',
   summary: 'Delete user',
   description: 'Delete a user (admin only)',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {

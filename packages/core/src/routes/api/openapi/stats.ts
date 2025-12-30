@@ -9,7 +9,7 @@ import { statsResponseSchema, errorResponseSchema } from '@package-broker/shared
 
 export const getStatsRouteDef = createRoute({
   method: 'get',
-  path: '/api/stats',
+  path: '/stats',
   summary: 'Get statistics',
   description: 'Get dashboard statistics',
   security: [{ Bearer: [] }],
@@ -28,24 +28,14 @@ export const getStatsRouteDef = createRoute({
 
 export const getPackageStatsRouteDef = createRoute({
   method: 'get',
-  path: '/api/packages/{name}/{version}/stats',
+  path: '/packages/{name}/{version}/stats',
   summary: 'Get package statistics',
   description: 'Get download statistics for a specific package version',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      name: z.string().openapi({
-        param: {
-          name: 'name',
-          in: 'path',
-        },
-      }),
-      version: z.string().openapi({
-        param: {
-          name: 'version',
-          in: 'path',
-        },
-      }),
+      name: z.string(),
+      version: z.string(),
     }),
   },
   responses: {

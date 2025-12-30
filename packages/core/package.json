@@ -33,7 +33,7 @@
     "aws4fetch": "^1.0.19",
     "drizzle-orm": "^0.29.0",
     "fflate": "^0.8.2",
-    "@hono/zod-openapi": "^1.1.4",
+    "@hono/zod-openapi": "^1.2.0",
     "hono": "^4.0.0",
     "micromatch": "^4.0.5",
     "nanoid": "^5.1.6",
@@ -42,7 +42,7 @@
     "p-retry": "^6.2.0",
     "qrcode": "^1.5.4",
     "semver": "^7.5.4",
-    "zod": "^3.22.4"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240125.0",

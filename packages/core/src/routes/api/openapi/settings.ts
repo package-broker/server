@@ -13,7 +13,7 @@ import {
 
 export const getSettingsRouteDef = createRoute({
   method: 'get',
-  path: '/api/settings',
+  path: '/settings',
   summary: 'Get settings',
   description: 'Get all settings including KV availability',
   security: [{ Bearer: [] }],
@@ -32,7 +32,7 @@ export const getSettingsRouteDef = createRoute({
 
 export const updatePackagistMirroringRouteDef = createRoute({
   method: 'put',
-  path: '/api/settings/packagist-mirroring',
+  path: '/settings/packagist-mirroring',
   summary: 'Update Packagist mirroring',
   description: 'Enable or disable public Packagist mirroring',
   security: [{ Bearer: [] }],

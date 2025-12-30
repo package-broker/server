@@ -11,15 +11,24 @@ import {
   errorResponseSchema,
 } from '@package-broker/shared';
 
+// Route paths are relative to module mount at /api/packages
 export const listPackagesRouteDef = createRoute({
   method: 'get',
-  path: '/packages',
+  path: '/',
   summary: 'List packages',
   description: 'List all packages with optional search',
   security: [{ Bearer: [] }],
   request: {
     query: z.object({
-      search: z.string().optional(),
+      search: z
+        .string()
+        .openapi({
+          param: {
+            name: 'search',
+            in: 'query',
+          },
+        })
+        .optional(),
     }),
   },
   responses: {
@@ -37,13 +46,18 @@ export const listPackagesRouteDef = createRoute({
 
 export const getPackageRouteDef = createRoute({
   method: 'get',
-  path: '/packages/{name}',
+  path: '/{name}',
   summary: 'Get package',
   description: 'Get a single package with all versions',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      name: z.string(),
+      name: z.string().openapi({
+        param: {
+          name: 'name',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {
@@ -69,14 +83,24 @@ export const getPackageRouteDef = createRoute({
 
 export const getPackageReadmeRouteDef = createRoute({
   method: 'get',
-  path: '/packages/{name}/{version}/readme',
+  path: '/{name}/{version}/readme',
   summary: 'Get package README',
   description: 'Get README.md content for a specific package version',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      name: z.string(),
-      version: z.string(),
+      name: z.string().openapi({
+        param: {
+          name: 'name',
+          in: 'path',
+        },
+      }),
+      version: z.string().openapi({
+        param: {
+          name: 'version',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {
@@ -102,14 +126,24 @@ export const getPackageReadmeRouteDef = createRoute({
 
 export const getPackageChangelogRouteDef = createRoute({
   method: 'get',
-  path: '/packages/{name}/{version}/changelog',
+  path: '/{name}/{version}/changelog',
   summary: 'Get package changelog',
   description: 'Get CHANGELOG.md content for a specific package version',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      name: z.string(),
-      version: z.string(),
+      name: z.string().openapi({
+        param: {
+          name: 'name',
+          in: 'path',
+        },
+      }),
+      version: z.string().openapi({
+        param: {
+          name: 'version',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {

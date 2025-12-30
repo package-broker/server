@@ -13,9 +13,10 @@ import {
   errorResponseSchema,
 } from '@package-broker/shared';
 
+// Route paths are relative to module mount at /api/tokens
 export const listTokensRouteDef = createRoute({
   method: 'get',
-  path: '/tokens',
+  path: '/',
   summary: 'List tokens',
   description: 'List all API tokens',
   security: [{ Bearer: [] }],
@@ -34,7 +35,7 @@ export const listTokensRouteDef = createRoute({
 
 export const createTokenRouteDef = createRoute({
   method: 'post',
-  path: '/tokens',
+  path: '/',
   summary: 'Create token',
   description: 'Create a new API token. The token is returned only once.',
   security: [{ Bearer: [] }],
@@ -70,13 +71,18 @@ export const createTokenRouteDef = createRoute({
 
 export const updateTokenRouteDef = createRoute({
   method: 'patch',
-  path: '/tokens/{id}',
+  path: '/{id}',
   summary: 'Update token',
   description: 'Update token description and rate limit',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
     body: {
       content: {
@@ -109,13 +115,18 @@ export const updateTokenRouteDef = createRoute({
 
 export const deleteTokenRouteDef = createRoute({
   method: 'delete',
-  path: '/tokens/{id}',
+  path: '/{id}',
   summary: 'Delete token',
   description: 'Revoke an API token',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {

@@ -1,6 +1,6 @@
 // Zod schemas for validation
 
-import { z } from 'zod';
+import { z } from '@hono/zod-openapi';
 
 export const credentialTypeSchema = z.enum([
   'http_basic',
@@ -20,7 +20,8 @@ export const createRepositorySchema = z.object({
   url: z.string().url('Invalid repository URL'),
   vcs_type: vcsTypeSchema,
   credential_type: credentialTypeSchema,
-  auth_credentials: z.record(z.string()).refine(
+  // Zod v4 requires both key and value schemas
+  auth_credentials: z.record(z.string(), z.string()).refine(
     (fields) => Object.keys(fields).length > 0,
     'At least one credential field is required'
   ),
@@ -165,3 +166,4 @@ export const tokenCreationResponseSchema = tokenResponseSchema.extend({
 
 // Repository list response
 export const repositoryListResponseSchema = z.array(repositoryResponseSchema);
+

@@ -7,15 +7,21 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { errorResponseSchema } from '@package-broker/shared';
 
+// Route paths are relative to module mount at /api/artifacts
 export const deleteArtifactRouteDef = createRoute({
   method: 'delete',
-  path: '/artifacts/{id}',
+  path: '/{id}',
   summary: 'Delete artifact',
   description: 'Delete an artifact from storage and database',
   security: [{ Bearer: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      id: z.string().openapi({
+        param: {
+          name: 'id',
+          in: 'path',
+        },
+      }),
     }),
   },
   responses: {
@@ -43,7 +49,7 @@ export const deleteArtifactRouteDef = createRoute({
 
 export const cleanupArtifactsRouteDef = createRoute({
   method: 'post',
-  path: '/artifacts/cleanup',
+  path: '/cleanup',
   summary: 'Cleanup artifacts',
   description: 'Clean up old artifacts based on retention days',
   security: [{ Bearer: [] }],

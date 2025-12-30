@@ -1,7 +1,7 @@
 // Packages API routes
 
 import type { Context } from 'hono';
-import type { OpenAPIContext } from './types';
+import type { OpenAPIContext } from '../../routes/api/types';
 import type { DatabasePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
 import { eq, like, and } from 'drizzle-orm';
@@ -12,7 +12,7 @@ import { downloadFromSource } from '../../utils/download';
 import { decryptCredentials } from '../../utils/encryption';
 import { nanoid } from 'nanoid';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
-import { isPackagistMirroringEnabled } from '../../modules/admin';
+import { isPackagistMirroringEnabled } from '../admin';
 import { getLogger } from '../../utils/logger';
 
 export interface PackagesRouteEnv {
