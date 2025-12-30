@@ -1,8 +1,8 @@
 // Authentication middleware
 
 import type { Context, Next } from 'hono';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import type { DatabasePort } from '../ports';
 import { tokens, type tokens as tokensTable } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -38,7 +38,9 @@ function extractBasicAuth(authHeader: string | undefined): {
  * Hash token using SHA-256 (for high-entropy tokens)
  */
 function hashToken(token: string): string {
-  const hash = sha256(token);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hash = sha256(data);
   return bytesToHex(hash);
 }
 

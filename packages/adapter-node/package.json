@@ -12,21 +12,21 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hono/node-server": "^1.11.1",
+    "@hono/node-server": "^1.19.7",
     "@package-broker/core": "*",
     "@package-broker/shared": "*",
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "^12.5.0",
     "dotenv": "^16.4.5",
-    "drizzle-orm": "^0.29.0",
+    "drizzle-orm": "^0.45.1",
     "hono": "^4.3.7",
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
-    "@types/node": "^20.12.7",
+    "@types/node": "^20.19.27",
     "tsup": "^8.5.1",
-    "tsx": "^4.7.2",
-    "typescript": "^5.4.5"
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",

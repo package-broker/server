@@ -12,8 +12,8 @@ import { createTokenSchema, updateTokenSchema } from '@package-broker/shared';
 import type { DatabasePort } from '../../ports';
 import { tokens } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { nanoid, customAlphabet } from 'nanoid';
 import { getAnalytics } from '../../utils/analytics';
 
@@ -36,7 +36,9 @@ export interface TokensRouteEnv {
  * Hash token using SHA-256
  */
 function hashToken(token: string): string {
-  const hash = sha256(token);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hash = sha256(data);
   return bytesToHex(hash);
 }
 

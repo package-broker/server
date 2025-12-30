@@ -6,4 +6,3 @@ export * from './constants';
 
 // Application version
 export const VERSION = '0.3.9';
-

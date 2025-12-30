@@ -166,4 +166,3 @@ export const tokenCreationResponseSchema = tokenResponseSchema.extend({
 
 // Repository list response
 export const repositoryListResponseSchema = z.array(repositoryResponseSchema);
-
