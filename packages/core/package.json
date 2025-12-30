@@ -42,7 +42,6 @@
     "p-retry": "^6.2.0",
     "qrcode": "^1.5.4",
     "semver": "^7.5.4",
-    "vite": "7.3.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
