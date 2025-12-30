@@ -19,13 +19,13 @@
     "@package-broker/shared": "*",
     "@tanstack/react-query": "^5.90.12",
     "clsx": "^2.1.0",
+    "lucide-react": "^0.468.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
     "react-router": "^7.10.1",
     "remark-gfm": "^4.0.0",
     "semver": "^7.5.4",
-    "lucide-react": "^0.468.0",
     "tailwind-merge": "^2.2.0",
     "zod": "^4.0.0",
     "zustand": "^4.4.7"
@@ -38,7 +38,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.3.3",
-    "vite": "^5.4.21"
+    "vite": "^7.3.0"
   },
   "repository": {
     "type": "git",
