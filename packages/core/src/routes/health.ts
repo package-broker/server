@@ -6,12 +6,13 @@
 
 import type { Context } from 'hono';
 import { getLogger } from '../utils/logger';
+import type { OpenAPIHono } from '@hono/zod-openapi';
 
 /**
  * Health check endpoint
  * Returns 200 OK if service is healthy
  */
-export async function healthRoute(c: Context): Promise<Response> {
+export async function healthRoute(c: Context<{ Variables: any }>): Promise<Response> {
   const logger = getLogger();
   logger.info('Health check requested', {
     method: c.req.method,

@@ -1,7 +1,9 @@
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
 import { UserService } from '../../services/UserService';
+import { createUserRequestSchema } from '@package-broker/shared';
 
-export async function listUsers(c: Context): Promise<Response> {
+export async function listUsers(c: OpenAPIContext): Promise<Response> {
     const db = c.get('database');
     const userService = new UserService(db);
 
@@ -15,7 +17,7 @@ export async function listUsers(c: Context): Promise<Response> {
     return c.json({ users });
 }
 
-export async function createUser(c: Context): Promise<Response> {
+export async function createUser(c: OpenAPIContext<any, ReturnType<typeof createUserRequestSchema.parse>>): Promise<Response> {
     const db = c.get('database');
     const userService = new UserService(db);
 
@@ -25,19 +27,8 @@ export async function createUser(c: Context): Promise<Response> {
         return c.json({ error: 'Forbidden' }, 403);
     }
 
-    let body;
-    try {
-        body = await c.req.json();
-    } catch {
-        return c.json({ error: 'Invalid JSON' }, 400);
-    }
-
+    const body = c.req.valid('json');
     const { email, password, role } = body;
-
-    // Password is now optional for invites
-    if (!email) {
-        return c.json({ error: 'Email is required' }, 400);
-    }
 
     try {
         const user = await userService.create({
@@ -120,10 +111,10 @@ export async function createUser(c: Context): Promise<Response> {
     }
 }
 
-export async function deleteUser(c: Context): Promise<Response> {
+export async function deleteUser(c: OpenAPIContext): Promise<Response> {
     const db = c.get('database');
     const userService = new UserService(db);
-    const userId = c.req.param('id');
+    const { id: userId } = c.req.valid('param');
 
     // Check permissions
     const session = c.get('session');

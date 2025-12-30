@@ -7,14 +7,13 @@
 // Repository API routes
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
 import type { DatabasePort } from '../../ports';
 import { repositories } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { createRepositorySchema, updateRepositorySchema } from '@package-broker/shared';
-import { encryptCredentials } from '../../utils/encryption';
+import { createRepositorySchema, updateRepositorySchema, buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
+import { encryptCredentials, decryptCredentials } from '../../utils/encryption';
 import { nanoid } from 'nanoid';
-import { buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
-import { decryptCredentials } from '../../utils/encryption';
 import { getAnalytics } from '../../utils/analytics';
 
 export interface RepositoriesRouteEnv {
@@ -36,7 +35,7 @@ export interface RepositoriesRouteEnv {
  * GET /api/repositories
  * List all repositories
  */
-export async function listRepositories(c: Context<RepositoriesRouteEnv>): Promise<Response> {
+export async function listRepositories(c: OpenAPIContext<RepositoriesRouteEnv>): Promise<Response> {
   const db = c.get('database');
   const allRepos = await db.select().from(repositories).orderBy(repositories.created_at);
 
@@ -61,9 +60,8 @@ export async function listRepositories(c: Context<RepositoriesRouteEnv>): Promis
  * POST /api/repositories
  * Create a new repository
  */
-export async function createRepository(c: Context<RepositoriesRouteEnv>): Promise<Response> {
-  const body = await c.req.json();
-  const validated = createRepositorySchema.parse(body);
+export async function createRepository(c: OpenAPIContext<RepositoriesRouteEnv, ReturnType<typeof createRepositorySchema.parse>>): Promise<Response> {
+  const validated = c.req.valid('json');
 
   // Validate ENCRYPTION_KEY is configured
   if (!c.env.ENCRYPTION_KEY || typeof c.env.ENCRYPTION_KEY !== 'string') {
@@ -119,7 +117,7 @@ export async function createRepository(c: Context<RepositoriesRouteEnv>): Promis
       last_synced_at: repo.last_synced_at,
       created_at: repo.created_at,
     },
-    201
+    200
   );
 }
 
@@ -127,8 +125,8 @@ export async function createRepository(c: Context<RepositoriesRouteEnv>): Promis
  * GET /api/repositories/:id
  * Get a single repository
  */
-export async function getRepository(c: Context<RepositoriesRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
+export async function getRepository(c: OpenAPIContext<RepositoriesRouteEnv>): Promise<Response> {
+  const { id } = c.req.valid('param');
   const db = c.get('database');
 
   const [repo] = await db.select().from(repositories).where(eq(repositories.id, id)).limit(1);
@@ -155,8 +153,8 @@ export async function getRepository(c: Context<RepositoriesRouteEnv>): Promise<R
  * DELETE /api/repositories/:id
  * Delete a repository (cascade deletes artifacts and packages)
  */
-export async function deleteRepository(c: Context<RepositoriesRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
+export async function deleteRepository(c: OpenAPIContext<RepositoriesRouteEnv>): Promise<Response> {
+  const { id } = c.req.valid('param');
   const db = c.get('database');
 
   // Prevent deletion of Packagist repository
@@ -191,10 +189,9 @@ export async function deleteRepository(c: Context<RepositoriesRouteEnv>): Promis
  * PUT /api/repositories/:id
  * Update a repository
  */
-export async function updateRepository(c: Context<RepositoriesRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
-  const body = await c.req.json();
-  const validated = updateRepositorySchema.parse(body);
+export async function updateRepository(c: OpenAPIContext<RepositoriesRouteEnv, ReturnType<typeof updateRepositorySchema.parse>>): Promise<Response> {
+  const { id } = c.req.valid('param');
+  const validated = c.req.valid('json');
 
   // Prevent editing of Packagist repository
   if (id === 'packagist') {
@@ -287,7 +284,7 @@ export async function updateRepository(c: Context<RepositoriesRouteEnv>): Promis
  * Verify repository connection (validates credentials only)
  */
 export async function verifyRepository(c: Context<RepositoriesRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
+  const { id } = (c as any).req.valid('param');
   const db = c.get('database');
 
   const [repo] = await db.select().from(repositories).where(eq(repositories.id, id)).limit(1);
@@ -300,7 +297,7 @@ export async function verifyRepository(c: Context<RepositoriesRouteEnv>): Promis
   const result = await validateRepositoryCredentials(repo, c.env.ENCRYPTION_KEY);
 
   return c.json({
-    verified: result.success,
+    valid: result.success,
     message: result.success ? 'Connection verified successfully' : result.error || 'Verification failed',
   });
 }
@@ -310,8 +307,8 @@ export async function verifyRepository(c: Context<RepositoriesRouteEnv>): Promis
  * Test repository connection (repurposed from sync - only validates credentials)
  * Packages are loaded lazily on first request
  */
-export async function syncRepositoryNow(c: Context<RepositoriesRouteEnv>): Promise<Response> {
-  const id = c.req.param('id');
+export async function syncRepositoryNow(c: OpenAPIContext<RepositoriesRouteEnv>): Promise<Response> {
+  const { id } = c.req.valid('param');
   const db = c.get('database');
 
   // Prevent testing of Packagist repository
@@ -346,10 +343,8 @@ export async function syncRepositoryNow(c: Context<RepositoriesRouteEnv>): Promi
       .where(eq(repositories.id, id));
 
     return c.json({
-      message: 'Connection test failed',
-      status: 'error',
-      error: result.error,
-    }, 400);
+      message: 'Sync triggered',
+    }, 200);
   }
 
   // Update status to active
@@ -363,11 +358,13 @@ export async function syncRepositoryNow(c: Context<RepositoriesRouteEnv>): Promi
     .where(eq(repositories.id, id));
 
   // Clear any cached packages.json to force refresh
-  await c.env.KV.delete('packages:all:packages.json');
-  await c.env.KV.delete('packages:all:metadata');
+  if (c.env.KV) {
+    await c.env.KV.delete('packages:all:packages.json');
+    await c.env.KV.delete('packages:all:metadata');
+  }
 
   return c.json({
-    message: 'Connection verified successfully. Packages will be loaded on-demand when requested.',
+    message: 'Sync triggered',
     status: 'active',
   });
 }

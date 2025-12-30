@@ -1,6 +1,6 @@
 // Zod schemas for validation
 
-import { z } from 'zod';
+import { z } from '@hono/zod-openapi';
 
 export const credentialTypeSchema = z.enum([
   'http_basic',
@@ -20,7 +20,8 @@ export const createRepositorySchema = z.object({
   url: z.string().url('Invalid repository URL'),
   vcs_type: vcsTypeSchema,
   credential_type: credentialTypeSchema,
-  auth_credentials: z.record(z.string()).refine(
+  // Zod v4 requires both key and value schemas
+  auth_credentials: z.record(z.string(), z.string()).refine(
     (fields) => Object.keys(fields).length > 0,
     'At least one credential field is required'
   ),
@@ -67,4 +68,102 @@ export const tokenResponseSchema = z.object({
   expires_at: z.number().nullable(),
   last_used_at: z.number().nullable(),
 });
+
+// Auth schemas
+export const loginRequestSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+  code: z.string().optional(), // 2FA code
+});
+
+export const loginResponseSchema = z.object({
+  token: z.string(),
+  user: z.object({
+    id: z.string(),
+    email: z.string(),
+    role: z.enum(['admin', 'viewer']),
+    two_factor_enabled: z.boolean(),
+  }),
+});
+
+export const userResponseSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.enum(['admin', 'viewer']),
+  two_factor_enabled: z.boolean(),
+});
+
+export const userListResponseSchema = z.object({
+  users: z.array(userResponseSchema),
+});
+
+export const createUserRequestSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().optional(),
+  role: z.enum(['admin', 'viewer']).default('viewer'),
+});
+
+export const createUserResponseSchema = z.object({
+  message: z.string(),
+  user: userResponseSchema,
+});
+
+// Error response schema
+export const errorResponseSchema = z.object({
+  error: z.string(),
+  message: z.string().optional(),
+  code: z.string().optional(),
+  requestId: z.string().optional(),
+});
+
+// Health check response
+export const healthResponseSchema = z.object({
+  status: z.string(),
+  timestamp: z.number(),
+});
+
+// Stats response
+export const statsResponseSchema = z.object({
+  active_repos: z.number(),
+  cached_packages: z.number(),
+  total_downloads: z.number(),
+});
+
+// Settings response
+export const settingsResponseSchema = z.object({
+  kv_available: z.boolean(),
+  packagist_mirroring_enabled: z.boolean(),
+  package_caching_enabled: z.boolean(),
+});
+
+export const updatePackagistMirroringRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+
+// Package schemas
+export const packageResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  version: z.string(),
+  repo_id: z.string(),
+  dist_url: z.string().nullable(),
+  source_dist_url: z.string().nullable(),
+  released_at: z.number().nullable(),
+  created_at: z.number(),
+});
+
+export const packageListResponseSchema = z.array(packageResponseSchema);
+
+export const packageWithVersionsResponseSchema = z.object({
+  name: z.string(),
+  versions: z.array(packageResponseSchema),
+});
+
+// Token creation response (includes token only once)
+export const tokenCreationResponseSchema = tokenResponseSchema.extend({
+  token: z.string(), // Only returned on creation
+});
+
+// Repository list response
+export const repositoryListResponseSchema = z.array(repositoryResponseSchema);
 

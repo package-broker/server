@@ -7,6 +7,8 @@
 // Settings API route
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
+import { updatePackagistMirroringRequestSchema } from '@package-broker/shared';
 
 export interface SettingsRouteEnv {
   Bindings: {
@@ -30,7 +32,7 @@ function isKvAvailable(kv: KVNamespace | undefined): boolean {
  * GET /api/settings
  * Get all settings including KV availability
  */
-export async function getSettings(c: Context<SettingsRouteEnv>): Promise<Response> {
+export async function getSettings(c: OpenAPIContext<SettingsRouteEnv>): Promise<Response> {
   const kvAvailable = isKvAvailable(c.env.KV);
   const packagistMirroringEnabled = kvAvailable && c.env.KV
     ? await c.env.KV.get(PACKAGIST_MIRRORING_KEY)
@@ -51,9 +53,9 @@ export async function getSettings(c: Context<SettingsRouteEnv>): Promise<Respons
  * Enable or disable public Packagist mirroring
  */
 export async function updatePackagistMirroring(
-  c: Context<SettingsRouteEnv>
+  c: OpenAPIContext<SettingsRouteEnv, ReturnType<typeof updatePackagistMirroringRequestSchema.parse>>
 ): Promise<Response> {
-  const body = await c.req.json() as { enabled: boolean };
+  const body = c.req.valid('json');
 
   if (typeof body.enabled !== 'boolean') {
     return c.json({ error: 'Bad Request', message: 'enabled must be a boolean' }, 400);

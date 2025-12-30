@@ -1,6 +1,7 @@
 // Stats API route
 
 import type { Context } from 'hono';
+import type { OpenAPIContext } from './types';
 import type { DatabasePort } from '../../ports';
 import { repositories, artifacts, packages } from '../../db/schema';
 import { eq, sql, and } from 'drizzle-orm';
@@ -18,7 +19,7 @@ export interface StatsRouteEnv {
  * GET /api/stats
  * Get dashboard statistics
  */
-export async function getStats(c: Context<StatsRouteEnv>): Promise<Response> {
+export async function getStats(c: OpenAPIContext<StatsRouteEnv>): Promise<Response> {
   const db = c.get('database');
 
   // Active repositories count
@@ -51,9 +52,8 @@ export async function getStats(c: Context<StatsRouteEnv>): Promise<Response> {
  * GET /packages/:name/:version/stats
  * Get download stats for a specific package version
  */
-export async function getPackageStats(c: Context<StatsRouteEnv>): Promise<Response> {
-  const nameParam = c.req.param('name');
-  const version = c.req.param('version');
+export async function getPackageStats(c: OpenAPIContext<StatsRouteEnv>): Promise<Response> {
+  const { name: nameParam, version } = c.req.valid('param');
   const name = decodeURIComponent(nameParam);
   const db = c.get('database');
 

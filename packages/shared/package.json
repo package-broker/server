@@ -24,7 +24,8 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "zod": "^3.22.4"
+    "@hono/zod-openapi": "^1.2.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
