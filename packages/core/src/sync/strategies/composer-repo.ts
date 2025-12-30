@@ -8,6 +8,9 @@
 
 import type { SyncResult, ComposerPackage, ComposerPackagesJson, ProviderFile, ProviderPackageResponse } from '../types';
 import { buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
+
+// HeadersInit type for node environments
+type HeadersInit = Record<string, string> | [string, string][] | Headers;
 import pRetry from 'p-retry';
 import { getLogger } from '../../utils/logger';
 

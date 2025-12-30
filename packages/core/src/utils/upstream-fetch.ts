@@ -8,6 +8,9 @@
 
 import { buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
 import type { ComposerPackagesJson, ProviderFile, ProviderPackageResponse } from '../sync/types';
+
+// HeadersInit type for node environments
+type HeadersInit = Record<string, string> | [string, string][] | Headers;
 import { decryptCredentials } from './encryption';
 import pRetry from 'p-retry';
 

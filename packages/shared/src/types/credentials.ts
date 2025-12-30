@@ -2,6 +2,9 @@
 
 import type { CredentialType, CredentialConfig } from './index';
 
+// HeadersInit type for environments without standard lib types
+type HeadersInit = Record<string, string> | [string, string][] | Headers;
+
 /**
  * Credential field definitions for each credential type
  */

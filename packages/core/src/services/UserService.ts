@@ -3,8 +3,8 @@ import { type Database } from '../db';
 import { users } from '../db/schema';
 import { eq, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
 export type CreateUserParams = {
     email: string;

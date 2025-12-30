@@ -6,7 +6,8 @@
         "moduleResolution": "bundler",
         "outDir": "./dist",
         "types": [
-            "node"
+            "node",
+            "@cloudflare/workers-types"
         ],
         "baseUrl": ".",
         "paths": {
