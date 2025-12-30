@@ -13,16 +13,16 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
-    "@package-broker/core": "*",
-    "@package-broker/shared": "*",
+    "@package-broker/core": "^0.9.0",
+    "@package-broker/shared": "^0.9.0",
     "better-sqlite3": "^12.5.0",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
-    "hono": "^4.3.7",
-    "ioredis": "^5.4.1"
+    "hono": "^4.11.3",
+    "ioredis": "^5.8.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.9",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.27",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
