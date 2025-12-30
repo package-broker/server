@@ -46,22 +46,23 @@ jobs:
         CI: true
         TEST_BASE_URL: http://localhost:8787
 
-    - name: Validate OpenAPI Spec
+    - name: Validate OpenAPI Spec and API Contract
       run: |
+        # Kill any existing process on port 8787
+        lsof -ti:8787 | xargs kill -9 2>/dev/null || true
+        sleep 2
+        
         npm run dev &
         SERVER_PID=$!
         sleep 15
+        
+        # Validate OpenAPI spec structure
         curl -f http://localhost:8787/api/openapi.json -o openapi.json || (kill $SERVER_PID && exit 1)
         npx @apidevtools/swagger-cli validate openapi.json || (kill $SERVER_PID && exit 1)
-        kill $SERVER_PID || true
-      continue-on-error: false
-
-    - name: Test API Contract
-      run: |
-        npm run dev &
-        SERVER_PID=$!
-        sleep 15
+        
+        # Test API contract (includes endpoint validation)
         node scripts/validate-api-contract.mjs || (kill $SERVER_PID && exit 1)
+        
         kill $SERVER_PID || true
       env:
         API_URL: http://localhost:8787
