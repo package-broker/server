@@ -17,6 +17,7 @@ wrangler.toml
 .vscode/
 *.swp
 *.swo
+*.code-workspace
 .DS_Store
 
 # Testing
@@ -43,3 +44,14 @@ packages/core/drizzle/
 # Local npm cache (used by CI/sandbox workarounds)
 .npm-cache/
 package-broker-data/
+
+# Ignore all markdown files (protect against accidental commits of internal docs)
+*.md
+
+# Exception: Allow specific markdown files that should be tracked
+!README.md
+!CHANGELOG.md
+!CODE_OF_CONDUCT.md
+!CONTRIBUTING.md
+!SECURITY.md
+!RELEASE_GUIDE.md
