@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
-    "@package-broker/core": "^0.9.0",
-    "@package-broker/shared": "^0.9.0",
+    "@package-broker/core": "^0.10.0",
+    "@package-broker/shared": "^0.10.0",
     "better-sqlite3": "^12.5.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",

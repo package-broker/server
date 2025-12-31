@@ -1,6 +1,6 @@
 // Credential type definitions
 
-import type { CredentialType, CredentialConfig } from './index';
+import type { CredentialType, CredentialConfig } from './index.js';
 
 // HeadersInit type for environments without standard lib types
 type HeadersInit = Record<string, string> | [string, string][] | Headers;
