@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/cloudflare",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "Interactive CLI tool for deploying PACKAGE.broker to Cloudflare Workers",
   "type": "module",
   "bin": {
