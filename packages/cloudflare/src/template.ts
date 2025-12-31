@@ -6,12 +6,9 @@
  * Licensed under AGPL-3.0
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { findMainPackage } from './paths.js';
 
 export interface TemplateVariables {
   worker_name: string;
@@ -19,49 +16,7 @@ export interface TemplateVariables {
   generated_kv_id: string;
   generated_queue_name?: string;
   paid_tier: boolean;
-}
-
-/**
- * Find @package-broker/main package in various locations
- */
-function findMainPackage(targetDir: string): string | null {
-  // Try standard node_modules location
-  const standardPath = join(
-    targetDir,
-    'node_modules',
-    '@package-broker',
-    'main'
-  );
-  if (existsSync(standardPath)) {
-    return standardPath;
-  }
-
-  // Try parent directory node_modules (workspace root)
-  const parentNodeModules = join(
-    targetDir,
-    '..',
-    'node_modules',
-    '@package-broker',
-    'main'
-  );
-  if (existsSync(parentNodeModules)) {
-    return parentNodeModules;
-  }
-
-  // Try monorepo structure (for development/testing)
-  // Check if we're in a monorepo by looking for packages/main relative to current dir
-  let currentPath = targetDir;
-  for (let i = 0; i < 5; i++) {
-    const monorepoPath = join(currentPath, 'packages', 'main');
-    if (existsSync(monorepoPath)) {
-      return monorepoPath;
-    }
-    const parentPath = join(currentPath, '..');
-    if (parentPath === currentPath) break; // Reached filesystem root
-    currentPath = parentPath;
-  }
-
-  return null;
+  domain?: string;
 }
 
 /**
@@ -87,6 +42,26 @@ function loadTemplate(targetDir: string): string {
       `Make sure @package-broker/main is installed: npm install @package-broker/main`
     );
   }
+}
+
+/**
+ * Generate custom domain route configuration
+ */
+function generateDomainRoutes(domain: string): string {
+  return `
+# Custom domain route
+[[routes]]
+pattern = "${domain}/*"
+custom_domain = true
+`;
+}
+
+/**
+ * Check if a domain route already exists in the template
+ */
+function hasDomainRoute(template: string, domain: string): boolean {
+  return template.includes(`pattern = "${domain}`) || 
+         template.includes(`pattern = '${domain}`);
 }
 
 /**
@@ -176,6 +151,11 @@ binding = "ASSETS"
     );
   }
 
+  // Add custom domain route if provided and not already present
+  if (variables.domain && !hasDomainRoute(template, variables.domain)) {
+    template = template.trimEnd() + generateDomainRoutes(variables.domain);
+  }
+
   return template;
 }
 
@@ -189,4 +169,3 @@ export function writeWranglerToml(
   const wranglerPath = join(targetDir, 'wrangler.toml');
   writeFileSync(wranglerPath, content, 'utf-8');
 }
-

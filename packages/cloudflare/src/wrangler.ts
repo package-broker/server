@@ -7,6 +7,12 @@
  */
 
 import { execa } from 'execa';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface D1Database {
   database_id: string;
@@ -27,22 +33,155 @@ export interface Queue {
 }
 
 /**
+ * Common options for wrangler commands
+ */
+export interface WranglerOptions {
+  cwd?: string;
+  apiToken?: string;
+  accountId?: string;
+  configPath?: string;
+}
+
+/**
+ * Build environment variables for wrangler execution
+ * Uses explicit options, falls back to process.env
+ */
+function buildWranglerEnv(options?: WranglerOptions): Record<string, string> {
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
+  
+  // Explicit options take precedence
+  if (options?.apiToken) {
+    env.CLOUDFLARE_API_TOKEN = options.apiToken;
+  }
+  if (options?.accountId) {
+    env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
+  }
+  
+  return env;
+}
+
+/**
+ * Resolve the wrangler binary path
+ * Priority:
+ * 1. Local node_modules/.bin/wrangler in the target directory
+ * 2. CLI package's own node_modules/.bin/wrangler
+ * 3. null (will use npx --no-install)
+ */
+function resolveWranglerBinary(cwd?: string): string | null {
+  const binName = process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler';
+  
+  // Try target directory's node_modules
+  if (cwd) {
+    const localBin = join(cwd, 'node_modules', '.bin', binName);
+    if (existsSync(localBin)) {
+      return localBin;
+    }
+  }
+  
+  // Try CLI package's own node_modules
+  const cliPackageBin = join(__dirname, '..', 'node_modules', '.bin', binName);
+  if (existsSync(cliPackageBin)) {
+    return cliPackageBin;
+  }
+  
+  // Try monorepo structure (development)
+  const monorepoRoot = join(__dirname, '..', '..', '..', 'node_modules', '.bin', binName);
+  if (existsSync(monorepoRoot)) {
+    return monorepoRoot;
+  }
+  
+  return null;
+}
+
+/**
  * Execute a wrangler command and return the output
+ * Prefers local wrangler binary, falls back to npx --no-install
  */
 async function execWrangler(
   args: string[],
-  options?: { cwd?: string; env?: Record<string, string> }
+  options?: WranglerOptions
 ): Promise<{ stdout: string; stderr: string }> {
+  const env = buildWranglerEnv(options);
+  const cwd = options?.cwd || process.cwd();
+  
+  // Add config path if provided
+  const fullArgs = [...args];
+  if (options?.configPath) {
+    fullArgs.push('--config', options.configPath);
+  }
+  
+  // Try to find local wrangler binary
+  const wranglerBin = resolveWranglerBinary(cwd);
+  
   try {
-    const result = await execa('npx', ['wrangler', ...args], {
-      cwd: options?.cwd || process.cwd(),
-      env: options?.env,
-      stdio: 'pipe',
-    });
+    let result;
+    if (wranglerBin) {
+      // Use local wrangler binary
+      result = await execa(wranglerBin, fullArgs, {
+        cwd,
+        env,
+        stdio: 'pipe',
+      });
+    } else {
+      // Fall back to npx --no-install (won't auto-install)
+      result = await execa('npx', ['--no-install', 'wrangler', ...fullArgs], {
+        cwd,
+        env,
+        stdio: 'pipe',
+      });
+    }
     return { stdout: result.stdout, stderr: result.stderr };
-  } catch (error: any) {
-    if (error.stdout || error.stderr) {
-      return { stdout: error.stdout || '', stderr: error.stderr || '' };
+  } catch (error: unknown) {
+    const execaError = error as { stdout?: string; stderr?: string };
+    if (execaError.stdout || execaError.stderr) {
+      return { stdout: execaError.stdout || '', stderr: execaError.stderr || '' };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Execute wrangler with stdin input
+ */
+async function execWranglerWithInput(
+  args: string[],
+  input: string,
+  options?: WranglerOptions
+): Promise<{ stdout: string; stderr: string }> {
+  const env = buildWranglerEnv(options);
+  const cwd = options?.cwd || process.cwd();
+  
+  // Add config path if provided
+  const fullArgs = [...args];
+  if (options?.configPath) {
+    fullArgs.push('--config', options.configPath);
+  }
+  
+  // Try to find local wrangler binary
+  const wranglerBin = resolveWranglerBinary(cwd);
+  
+  try {
+    let result;
+    if (wranglerBin) {
+      result = await execa(wranglerBin, fullArgs, {
+        cwd,
+        env,
+        input,
+        stdio: 'pipe',
+      });
+    } else {
+      result = await execa('npx', ['--no-install', 'wrangler', ...fullArgs], {
+        cwd,
+        env,
+        input,
+        stdio: 'pipe',
+      });
+    }
+    return { stdout: result.stdout, stderr: result.stderr };
+  } catch (error: unknown) {
+    const execaError = error as { stdout?: string; stderr?: string };
+    if (execaError.stdout || execaError.stderr) {
+      return { stdout: execaError.stdout || '', stderr: execaError.stderr || '' };
     }
     throw error;
   }
@@ -50,14 +189,78 @@ async function execWrangler(
 
 /**
  * Check if user is authenticated with wrangler
+ * Supports both interactive (wrangler login) and CI (API token) authentication
  */
-export async function checkAuth(): Promise<boolean> {
+export async function checkAuth(options?: WranglerOptions): Promise<boolean> {
   try {
-    const { stdout } = await execWrangler(['whoami']);
-    return stdout.includes('@') || stdout.length > 0;
+    const { stdout } = await execWrangler(['whoami'], options);
+    // Check for common success patterns
+    return (
+      stdout.includes('@') ||
+      stdout.includes('Account ID') ||
+      stdout.includes('You are logged in') ||
+      stdout.length > 0
+    );
   } catch {
     return false;
   }
+}
+
+/**
+ * Verify that the API token has required permissions
+ * Checks by attempting to list resources
+ */
+export async function verifyTokenPermissions(
+  options?: WranglerOptions & { paidTier?: boolean }
+): Promise<{ valid: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  
+  // Check D1 access
+  try {
+    const { stderr } = await execWrangler(['d1', 'list'], options);
+    if (stderr.includes('permission') || stderr.includes('unauthorized')) {
+      errors.push('D1 Database: Missing permission');
+    }
+  } catch {
+    errors.push('D1 Database: Unable to verify access');
+  }
+  
+  // Check KV access
+  try {
+    const { stderr } = await execWrangler(['kv', 'namespace', 'list'], options);
+    if (stderr.includes('permission') || stderr.includes('unauthorized')) {
+      errors.push('KV Namespace: Missing permission');
+    }
+  } catch {
+    errors.push('KV Namespace: Unable to verify access');
+  }
+  
+  // Check R2 access
+  try {
+    const { stderr } = await execWrangler(['r2', 'bucket', 'list'], options);
+    if (stderr.includes('permission') || stderr.includes('unauthorized')) {
+      errors.push('R2 Bucket: Missing permission');
+    }
+  } catch {
+    errors.push('R2 Bucket: Unable to verify access');
+  }
+  
+  // Check Queue access (paid tier only)
+  if (options?.paidTier) {
+    try {
+      const { stderr } = await execWrangler(['queues', 'list'], options);
+      if (stderr.includes('permission') || stderr.includes('unauthorized')) {
+        errors.push('Queue: Missing permission');
+      }
+    } catch {
+      errors.push('Queue: Unable to verify access');
+    }
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 /**
@@ -65,13 +268,9 @@ export async function checkAuth(): Promise<boolean> {
  */
 export async function createD1Database(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<string> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
-  const { stdout, stderr } = await execWrangler(['d1', 'create', name], { env });
+  const { stdout, stderr } = await execWrangler(['d1', 'create', name], options);
 
   // Try to parse JSON output first
   try {
@@ -100,14 +299,10 @@ export async function createD1Database(
  */
 export async function findD1Database(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<string | null> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
   try {
-    const { stdout } = await execWrangler(['d1', 'list'], { env });
+    const { stdout } = await execWrangler(['d1', 'list'], options);
     // Parse JSON or text output
     let databases: D1Database[] = [];
     
@@ -139,13 +334,9 @@ export async function findD1Database(
  */
 export async function createKVNamespace(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<string> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
-  const { stdout, stderr } = await execWrangler(['kv', 'namespace', 'create', name], { env });
+  const { stdout, stderr } = await execWrangler(['kv', 'namespace', 'create', name], options);
 
   // Parse output: "id = "abc123...""
   const idMatch = stdout.match(/id\s*=\s*["']?([a-f0-9]{32})["']?/i) ||
@@ -164,14 +355,10 @@ export async function createKVNamespace(
  */
 export async function findKVNamespace(
   title: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<string | null> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
   try {
-    const { stdout } = await execWrangler(['kv', 'namespace', 'list'], { env });
+    const { stdout } = await execWrangler(['kv', 'namespace', 'list'], options);
     
     try {
       const json = JSON.parse(stdout);
@@ -201,13 +388,9 @@ export async function findKVNamespace(
  */
 export async function createR2Bucket(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<void> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
-  const { stdout, stderr } = await execWrangler(['r2', 'bucket', 'create', name], { env });
+  const { stdout, stderr } = await execWrangler(['r2', 'bucket', 'create', name], options);
 
   // Check for errors (bucket might already exist)
   if (stderr && !stderr.includes('already exists') && !stdout.includes('Created')) {
@@ -220,14 +403,10 @@ export async function createR2Bucket(
  */
 export async function findR2Bucket(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<boolean> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
   try {
-    const { stdout } = await execWrangler(['r2', 'bucket', 'list'], { env });
+    const { stdout } = await execWrangler(['r2', 'bucket', 'list'], options);
     
     try {
       const json = JSON.parse(stdout);
@@ -247,13 +426,9 @@ export async function findR2Bucket(
  */
 export async function createQueue(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<void> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
-  const { stdout, stderr } = await execWrangler(['queues', 'create', name], { env });
+  const { stdout, stderr } = await execWrangler(['queues', 'create', name], options);
 
   if (stderr && !stderr.includes('already exists') && !stdout.includes('Created')) {
     throw new Error(`Failed to create Queue: ${stderr || stdout}`);
@@ -265,14 +440,10 @@ export async function createQueue(
  */
 export async function findQueue(
   name: string,
-  options?: { accountId?: string; apiToken?: string }
+  options?: WranglerOptions
 ): Promise<boolean> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
   try {
-    const { stdout } = await execWrangler(['queues', 'list'], { env });
+    const { stdout } = await execWrangler(['queues', 'list'], options);
     
     try {
       const json = JSON.parse(stdout);
@@ -292,25 +463,16 @@ export async function findQueue(
 export async function setSecret(
   secretName: string,
   secretValue: string,
-  options?: { accountId?: string; apiToken?: string; cwd?: string; workerName?: string }
+  options?: WranglerOptions & { workerName?: string }
 ): Promise<void> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
   // Build wrangler command with --name if worker name is provided
-  const wranglerArgs = ['wrangler', 'secret', 'put', secretName];
+  const args = ['secret', 'put', secretName];
   if (options?.workerName) {
-    wranglerArgs.push('--name', options.workerName);
+    args.push('--name', options.workerName);
   }
 
   // wrangler secret put reads from stdin
-  const { stderr, stdout } = await execa('npx', wranglerArgs, {
-    cwd: options?.cwd || process.cwd(),
-    env,
-    input: secretValue + '\n',
-    stdio: 'pipe',
-  });
+  const { stderr, stdout } = await execWranglerWithInput(args, secretValue + '\n', options);
 
   // Check for success indicators
   const output = (stdout + stderr).toLowerCase();
@@ -333,20 +495,14 @@ export async function setSecret(
 export async function applyMigrations(
   databaseName: string,
   migrationsDir: string,
-  options?: { accountId?: string; apiToken?: string; remote?: boolean; cwd?: string }
+  options?: WranglerOptions & { remote?: boolean }
 ): Promise<void> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
   const args = ['d1', 'migrations', 'apply', databaseName];
   if (options?.remote !== false) {
     args.push('--remote');
   }
 
-  // Run from project root (where wrangler.toml is), not migrations directory
-  const cwd = options?.cwd || process.cwd();
-  const { stdout, stderr } = await execWrangler(args, { env, cwd });
+  const { stdout, stderr } = await execWrangler(args, options);
 
   if (stderr && !stderr.includes('Applied') && !stdout.includes('Applied')) {
     // Check if migrations were already applied or if it's a duplicate column error (safe to ignore)
@@ -367,23 +523,16 @@ export async function applyMigrations(
 /**
  * Get account subdomain from wrangler whoami
  */
-async function getAccountSubdomain(options?: { accountId?: string; apiToken?: string; cwd?: string }): Promise<string | null> {
+async function getAccountSubdomain(options?: WranglerOptions): Promise<string | null> {
   try {
-    const env: Record<string, string> = {};
-    if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-    if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
-    const { stdout } = await execWrangler(['whoami'], {
-      env,
-      cwd: options?.cwd || process.cwd(),
-    });
+    const { stdout } = await execWrangler(['whoami'], options);
 
     // Extract subdomain from whoami output (format: "lukasz-bajsarowicz" or similar)
     const subdomainMatch = stdout.match(/@([\w-]+)/);
     if (subdomainMatch) {
       return subdomainMatch[1];
     }
-  } catch (error) {
+  } catch {
     // Ignore errors, return null
   }
   return null;
@@ -393,16 +542,9 @@ async function getAccountSubdomain(options?: { accountId?: string; apiToken?: st
  * Deploy a Worker
  */
 export async function deployWorker(
-  options?: { accountId?: string; apiToken?: string; cwd?: string; workerName?: string }
+  options?: WranglerOptions & { workerName?: string }
 ): Promise<string> {
-  const env: Record<string, string> = {};
-  if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
-  if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
-
-  const { stdout, stderr } = await execWrangler(['deploy'], {
-    env,
-    cwd: options?.cwd || process.cwd(),
-  });
+  const { stdout, stderr } = await execWrangler(['deploy'], options);
 
   // Check for deployment errors
   if (stderr && !stderr.includes('Successfully') && !stderr.includes('deployed')) {
@@ -447,4 +589,3 @@ export async function deployWorker(
   // Last resort: return placeholder
   return 'https://your-worker.workers.dev';
 }
-
