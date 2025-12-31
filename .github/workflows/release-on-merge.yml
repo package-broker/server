@@ -93,9 +93,12 @@ jobs:
           VERSION="${{ needs.calculate-version.outputs.version }}"
           node scripts/update-versions.js "$VERSION"
 
+      - name: Regenerate package-lock.json
+        run: npm install --package-lock-only
+
       - name: Commit version updates
         run: |
-          git add packages/*/package.json package.json
+          git add packages/*/package.json package.json package-lock.json
           git commit -m "chore(release): bump version to ${{ needs.calculate-version.outputs.version }}"
           git push origin main
 
