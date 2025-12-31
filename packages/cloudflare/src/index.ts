@@ -35,8 +35,28 @@ const COLORS = {
   red: '\x1b[31m',
 };
 
-function log(message: string, color: keyof typeof COLORS = 'reset') {
-  console.log(`${COLORS[color]}${message}${COLORS.reset}`);
+interface CIMode {
+  enabled: boolean;
+  jsonOutput: boolean;
+}
+
+function log(message: string, color: keyof typeof COLORS = 'reset', ciMode?: CIMode) {
+  if (ciMode?.enabled) {
+    // GitHub Actions annotations - message may already contain ::notice:: etc
+    if (message.startsWith('::error::') || message.startsWith('::warning::') || message.startsWith('::notice::')) {
+      console.log(message);
+    } else if (color === 'red') {
+      console.log(`::error::${message}`);
+    } else if (color === 'yellow') {
+      console.log(`::warning::${message}`);
+    } else if (color === 'blue' || color === 'green') {
+      console.log(`::notice::${message}`);
+    } else {
+      console.log(message);
+    }
+  } else {
+    console.log(`${COLORS[color]}${message}${COLORS.reset}`);
+  }
 }
 
 function generateEncryptionKey(): string {
@@ -90,6 +110,264 @@ function findMainPackage(targetDir: string): string | null {
   return null;
 }
 
+/**
+ * Parse command line arguments for CI mode
+ */
+function parseArgs(): { ciMode: boolean; jsonOutput: boolean; command?: string } {
+  const args = process.argv.slice(2);
+  const ciMode = args.includes('--ci') || process.env.CI === 'true';
+  const jsonOutput = args.includes('--json');
+  const command = args.find(arg => !arg.startsWith('--'));
+  
+  return { ciMode, jsonOutput, command };
+}
+
+/**
+ * Get CI configuration from environment variables and args
+ */
+function getCIConfig(): {
+  workerName: string;
+  tier: 'free' | 'paid';
+  domain?: string;
+  skipUiBuild: boolean;
+  skipMigrations: boolean;
+  encryptionKey: string;
+  apiToken?: string;
+  accountId?: string;
+} {
+  const args = process.argv.slice(2);
+  
+  // Helper to get value from args or env
+  const getValue = (argName: string, envName: string, defaultValue?: string): string | undefined => {
+    const argIndex = args.indexOf(`--${argName}`);
+    if (argIndex !== -1 && args[argIndex + 1] && !args[argIndex + 1].startsWith('--')) {
+      return args[argIndex + 1];
+    }
+    return process.env[envName] || defaultValue;
+  };
+  
+  // Helper to check for boolean flags
+  const hasFlag = (flagName: string, envName: string): boolean => {
+    return args.includes(`--${flagName}`) || process.env[envName] === 'true';
+  };
+  
+  const workerName = getValue('worker-name', 'WORKER_NAME', 'package-broker') || 'package-broker';
+  const tier = (getValue('tier', 'CLOUDFLARE_TIER', 'free') || 'free') as 'free' | 'paid';
+  const domain = getValue('domain', 'DOMAIN');
+  const skipUiBuild = hasFlag('skip-ui-build', 'SKIP_UI_BUILD');
+  const skipMigrations = hasFlag('skip-migrations', 'SKIP_MIGRATIONS');
+  const encryptionKey = getValue('encryption-key', 'ENCRYPTION_KEY') || '';
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  
+  if (!encryptionKey) {
+    throw new Error('ENCRYPTION_KEY is required in CI mode. Set it via --encryption-key or ENCRYPTION_KEY env var.');
+  }
+  
+  if (!apiToken) {
+    throw new Error('CLOUDFLARE_API_TOKEN is required in CI mode.');
+  }
+  
+  if (!accountId) {
+    throw new Error('CLOUDFLARE_ACCOUNT_ID is required in CI mode.');
+  }
+  
+  return {
+    workerName,
+    tier,
+    domain,
+    skipUiBuild,
+    skipMigrations,
+    encryptionKey,
+    apiToken,
+    accountId,
+  };
+}
+
+/**
+ * CI mode deployment - non-interactive, outputs JSON
+ */
+async function deployCI(targetDir: string, ciMode: CIMode): Promise<void> {
+  const config = getCIConfig();
+  const { workerName, tier, domain, skipUiBuild, skipMigrations, encryptionKey, apiToken, accountId } = config;
+  const paidTier = tier === 'paid';
+  
+  const result: {
+    worker_url?: string;
+    database_id?: string;
+    kv_namespace_id?: string;
+    error?: string;
+  } = {};
+  
+  try {
+    log('::notice::Starting Cloudflare deployment in CI mode', 'reset', ciMode);
+    
+    // Check prerequisites
+    const mainPackagePath = findMainPackage(targetDir);
+    if (!mainPackagePath) {
+      throw new Error('@package-broker/main not found. Ensure package.json includes @package-broker/main and run npm ci.');
+    }
+    
+    // Check authentication
+    const isAuthenticated = await checkAuth({
+      apiToken,
+      accountId,
+    });
+    
+    if (!isAuthenticated) {
+      throw new Error('Cloudflare authentication failed. Check CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.');
+    }
+    
+    log('::notice::Cloudflare authentication verified', 'reset', ciMode);
+    
+    // Create resources
+    const dbName = `${workerName}-db`;
+    const kvTitle = `${workerName}-kv`;
+    const r2Bucket = `${workerName}-artifacts`;
+    const queueName = paidTier ? `${workerName}-queue` : undefined;
+    
+    let dbId: string;
+    let kvId: string;
+    
+    // D1 Database
+    log(`::notice::Discovering or creating D1 database: ${dbName}`, 'reset', ciMode);
+    const existingDbId = await findD1Database(dbName, { apiToken, accountId });
+    if (existingDbId) {
+      dbId = existingDbId;
+      log(`::notice::Database already exists: ${dbId}`, 'reset', ciMode);
+    } else {
+      dbId = await createD1Database(dbName, { apiToken, accountId });
+      log(`::notice::Database created: ${dbId}`, 'reset', ciMode);
+    }
+    result.database_id = dbId;
+    
+    // KV Namespace
+    log(`::notice::Discovering or creating KV namespace: ${kvTitle}`, 'reset', ciMode);
+    const existingKvId = await findKVNamespace(kvTitle, { apiToken, accountId });
+    if (existingKvId) {
+      kvId = existingKvId;
+      log(`::notice::KV namespace already exists: ${kvId}`, 'reset', ciMode);
+    } else {
+      kvId = await createKVNamespace(kvTitle, { apiToken, accountId });
+      log(`::notice::KV namespace created: ${kvId}`, 'reset', ciMode);
+    }
+    result.kv_namespace_id = kvId;
+    
+    // R2 Bucket
+    log(`::notice::Discovering or creating R2 bucket: ${r2Bucket}`, 'reset', ciMode);
+    const bucketExists = await findR2Bucket(r2Bucket, { apiToken, accountId });
+    if (!bucketExists) {
+      await createR2Bucket(r2Bucket, { apiToken, accountId });
+      log(`::notice::R2 bucket created`, 'reset', ciMode);
+    } else {
+      log(`::notice::R2 bucket already exists`, 'reset', ciMode);
+    }
+    
+    // Queue (paid tier only)
+    if (paidTier && queueName) {
+      log(`::notice::Discovering or creating Queue: ${queueName}`, 'reset', ciMode);
+      const queueExists = await findQueue(queueName, { apiToken, accountId });
+      if (!queueExists) {
+        await createQueue(queueName, { apiToken, accountId });
+        log(`::notice::Queue created`, 'reset', ciMode);
+      } else {
+        log(`::notice::Queue already exists`, 'reset', ciMode);
+      }
+    }
+    
+    // Set encryption key as secret
+    log('::notice::Setting encryption key as Cloudflare secret', 'reset', ciMode);
+    await setSecret('ENCRYPTION_KEY', encryptionKey, {
+      apiToken,
+      accountId,
+      cwd: targetDir,
+      workerName,
+    });
+    
+    // Generate wrangler.toml
+    log('::notice::Generating wrangler.toml', 'reset', ciMode);
+    const templateContent = renderTemplate(targetDir, {
+      worker_name: workerName,
+      generated_db_id: dbId,
+      generated_kv_id: kvId,
+      generated_queue_name: queueName,
+      paid_tier: paidTier,
+      domain,
+    });
+    writeWranglerToml(targetDir, templateContent);
+    
+    // Copy migrations
+    if (!skipMigrations) {
+      log('::notice::Copying migrations', 'reset', ciMode);
+      await copyMigrations(targetDir);
+    }
+    
+    // Build UI if needed
+    if (!skipUiBuild) {
+      const uiPackagePath = join(targetDir, 'node_modules', '@package-broker', 'ui');
+      const uiDistPath = join(uiPackagePath, 'dist');
+      
+      if (!existsSync(uiDistPath)) {
+        log('::warning::UI assets not found, attempting to build', 'reset', ciMode);
+        try {
+          const { execa } = await import('execa');
+          if (existsSync(uiPackagePath)) {
+            await execa('npm', ['run', 'build'], {
+              cwd: uiPackagePath,
+              stdio: 'pipe',
+            });
+            log('::notice::UI built successfully', 'reset', ciMode);
+          }
+        } catch (error) {
+          log(`::warning::Failed to build UI: ${(error as Error).message}`, 'reset', ciMode);
+        }
+      }
+    }
+    
+    // Apply migrations
+    if (!skipMigrations) {
+      log('::notice::Applying database migrations', 'reset', ciMode);
+      try {
+        await applyMigrations(dbName, join(targetDir, 'migrations'), {
+          apiToken,
+          accountId,
+          remote: true,
+          cwd: targetDir,
+        });
+      } catch (error) {
+        log(`::warning::Migration warning: ${(error as Error).message}`, 'reset', ciMode);
+      }
+    }
+    
+    // Deploy
+    log('::notice::Deploying Worker', 'reset', ciMode);
+    const workerUrl = await deployWorker({
+      apiToken,
+      accountId,
+      cwd: targetDir,
+      workerName,
+    });
+    result.worker_url = workerUrl;
+    log(`::notice::Deployment complete! Worker URL: ${workerUrl}`, 'reset', ciMode);
+    
+    // Output JSON if requested
+    if (ciMode.jsonOutput) {
+      console.log(JSON.stringify(result, null, 2));
+    }
+    
+  } catch (error) {
+    const errorMsg = (error as Error).message;
+    log(`::error::${errorMsg}`, 'reset', ciMode);
+    result.error = errorMsg;
+    
+    if (ciMode.jsonOutput) {
+      console.log(JSON.stringify(result, null, 2));
+    }
+    
+    process.exit(1);
+  }
+}
+
 async function copyMigrations(targetDir: string): Promise<number> {
   const mainPackagePath = findMainPackage(targetDir);
 
@@ -126,7 +404,16 @@ async function copyMigrations(targetDir: string): Promise<number> {
 
 async function main() {
   const targetDir = process.cwd();
-
+  const { ciMode, jsonOutput, command } = parseArgs();
+  const ciModeConfig: CIMode = { enabled: ciMode, jsonOutput };
+  
+  // Handle CI mode
+  if (ciMode && command === 'deploy') {
+    await deployCI(targetDir, ciModeConfig);
+    return;
+  }
+  
+  // Interactive mode
   log('\n🚀 PACKAGE.broker - Cloudflare Workers Setup\n', 'bright');
 
   // Check prerequisites

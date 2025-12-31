@@ -19,6 +19,7 @@ export interface TemplateVariables {
   generated_kv_id: string;
   generated_queue_name?: string;
   paid_tier: boolean;
+  domain?: string;
 }
 
 /**
@@ -174,6 +175,27 @@ binding = "ASSETS"
       /(compatibility_flags\s*=\s*\[[^\]]+\])/,
       `$1\n\n${assetsConfig}`
     );
+  }
+
+  // Add custom domain routes if provided
+  if (variables.domain) {
+    // Extract zone name (last two parts: example.com from app.example.com)
+    const domainParts = variables.domain.split('.');
+    const zoneName = domainParts.slice(-2).join('.');
+    const subdomain = domainParts.slice(0, -2).join('.') || '';
+    
+    // Check if routes section already exists
+    if (template.includes('routes =')) {
+      // Update existing routes
+      template = template.replace(
+        /routes\s*=\s*\[[^\]]+\]/,
+        `routes = [\n  { pattern = "${variables.domain}/*", zone_name = "${zoneName}" }\n]`
+      );
+    } else {
+      // Add routes section before the end of the file
+      const routesConfig = `\n# Custom domain route\nroutes = [\n  { pattern = "${variables.domain}/*", zone_name = "${zoneName}" }\n]`;
+      template = template.trimEnd() + routesConfig;
+    }
   }
 
   return template;

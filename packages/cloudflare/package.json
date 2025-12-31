@@ -21,7 +21,8 @@
   "dependencies": {
     "@package-broker/main": "*",
     "prompts": "^2.4.2",
-    "execa": "^8.0.1"
+    "execa": "^8.0.1",
+    "wrangler": "^4.54.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

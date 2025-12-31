@@ -7,6 +7,12 @@
  */
 
 import { execa } from 'execa';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface D1Database {
   database_id: string;
@@ -27,14 +33,30 @@ export interface Queue {
 }
 
 /**
- * Execute a wrangler command and return the output
+ * Find wrangler binary - prefer local installation, fallback to npx
  */
+function findWranglerBinary(): { command: string; args: string[] } {
+  // Try to find wrangler in node_modules relative to this package
+  const packageDir = dirname(dirname(__dirname));
+  const wranglerBin = join(packageDir, 'node_modules', '.bin', 'wrangler');
+  
+  if (existsSync(wranglerBin)) {
+    return { command: wranglerBin, args: [] };
+  }
+  
+  // Fallback to npx with --no-install to avoid auto-install
+  return { command: 'npx', args: ['--no-install', 'wrangler'] };
+}
+
 async function execWrangler(
   args: string[],
   options?: { cwd?: string; env?: Record<string, string> }
 ): Promise<{ stdout: string; stderr: string }> {
   try {
-    const result = await execa('npx', ['wrangler', ...args], {
+    const { command, args: baseArgs } = findWranglerBinary();
+    const allArgs = [...baseArgs, ...args];
+    
+    const result = await execa(command, allArgs, {
       cwd: options?.cwd || process.cwd(),
       env: options?.env,
       stdio: 'pipe',
@@ -51,9 +73,13 @@ async function execWrangler(
 /**
  * Check if user is authenticated with wrangler
  */
-export async function checkAuth(): Promise<boolean> {
+export async function checkAuth(options?: { accountId?: string; apiToken?: string }): Promise<boolean> {
   try {
-    const { stdout } = await execWrangler(['whoami']);
+    const env: Record<string, string> = {};
+    if (options?.apiToken) env.CLOUDFLARE_API_TOKEN = options.apiToken;
+    if (options?.accountId) env.CLOUDFLARE_ACCOUNT_ID = options.accountId;
+    
+    const { stdout } = await execWrangler(['whoami'], { env });
     return stdout.includes('@') || stdout.length > 0;
   } catch {
     return false;
