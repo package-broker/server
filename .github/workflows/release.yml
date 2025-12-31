@@ -217,7 +217,7 @@ jobs:
             npm config set registry https://registry.npmjs.org
           fi
 
-          for pkg in shared core ui main cli adapter-node; do
+          for pkg in shared core ui main cli adapter-node cloudflare; do
             echo "Publishing @package-broker/${pkg} to npmjs.org..."
             (cd "packages/${pkg}" && npm publish --access public --provenance)
           done
@@ -238,7 +238,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          for pkg in shared core ui main cli adapter-node; do
+          for pkg in shared core ui main cli adapter-node cloudflare; do
             echo "Publishing @package-broker/${pkg} to GitHub Packages..."
             (cd "packages/${pkg}" && npm publish)
           done
