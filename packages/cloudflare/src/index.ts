@@ -6,8 +6,9 @@
  * Licensed under AGPL-3.0
  */
 
-import { existsSync, mkdirSync, readdirSync, copyFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, copyFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import prompts from 'prompts';
 import { randomBytes } from 'crypto';
 import {
@@ -23,8 +24,51 @@ import {
   setSecret,
   applyMigrations,
   deployWorker,
+  verifyTokenPermissions,
+  type WranglerOptions,
 } from './wrangler.js';
 import { renderTemplate, writeWranglerToml } from './template.js';
+import { findMainPackage, findUiPackage } from './paths.js';
+import {
+  parseWranglerToml,
+  extractResourceIds,
+  findMissingResources,
+  generateWranglerToml,
+  mergeResourcesIntoConfig,
+  wranglerTomlExists,
+  type ResourceIds,
+} from './wrangler-config.js';
+
+// ============================================================================
+// Types and Interfaces
+// ============================================================================
+
+interface CLIOptions {
+  command: 'init' | 'deploy' | 'help';
+  ci: boolean;
+  json: boolean;
+  workerName?: string;
+  tier: 'free' | 'paid';
+  domain?: string;
+  skipUiBuild: boolean;
+  skipMigrations: boolean;
+}
+
+interface DeployResult {
+  worker_url: string;
+  database_id: string;
+  kv_namespace_id: string;
+  r2_bucket_name: string;
+  queue_name?: string;
+}
+
+interface ErrorResult {
+  error: string;
+}
+
+// ============================================================================
+// Logging Utilities
+// ============================================================================
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -35,9 +79,160 @@ const COLORS = {
   red: '\x1b[31m',
 };
 
-function log(message: string, color: keyof typeof COLORS = 'reset') {
-  console.log(`${COLORS[color]}${message}${COLORS.reset}`);
+const isCI = process.env.CI === 'true';
+
+/**
+ * Log a message to console (interactive mode) or stderr (CI mode with --json)
+ */
+function log(message: string, color: keyof typeof COLORS = 'reset', options?: { json?: boolean }) {
+  const output = options?.json ? process.stderr : process.stdout;
+  output.write(`${COLORS[color]}${message}${COLORS.reset}\n`);
 }
+
+/**
+ * Log a GitHub Actions annotation (only in CI environment)
+ */
+function ghAnnotation(type: 'notice' | 'warning' | 'error', message: string) {
+  if (isCI) {
+    console.error(`::${type}::${message}`);
+  }
+}
+
+/**
+ * Output JSON result to stdout (for --json mode)
+ */
+function outputJson(result: DeployResult | ErrorResult) {
+  console.log(JSON.stringify(result));
+}
+
+// ============================================================================
+// Argument Parsing
+// ============================================================================
+
+function parseArgs(argv: string[]): CLIOptions {
+  const args = argv.slice(2);
+  
+  const options: CLIOptions = {
+    command: 'init',
+    ci: false,
+    json: false,
+    tier: 'free',
+    skipUiBuild: false,
+    skipMigrations: false,
+  };
+  
+  // Parse command
+  if (args.length > 0 && !args[0].startsWith('-')) {
+    const cmd = args[0].toLowerCase();
+    if (cmd === 'deploy') {
+      options.command = 'deploy';
+    } else if (cmd === 'init') {
+      options.command = 'init';
+    } else if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
+      options.command = 'help';
+    }
+  }
+  
+  // Parse flags
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--ci') {
+      options.ci = true;
+    } else if (arg === '--json') {
+      options.json = true;
+    } else if (arg === '--worker-name' && args[i + 1]) {
+      options.workerName = args[++i];
+    } else if (arg === '--tier' && args[i + 1]) {
+      const tier = args[++i].toLowerCase();
+      if (tier === 'free' || tier === 'paid') {
+        options.tier = tier;
+      }
+    } else if (arg === '--domain' && args[i + 1]) {
+      options.domain = args[++i];
+    } else if (arg === '--skip-ui-build') {
+      options.skipUiBuild = true;
+    } else if (arg === '--skip-migrations') {
+      options.skipMigrations = true;
+    } else if (arg === '-h' || arg === '--help') {
+      options.command = 'help';
+    }
+  }
+  
+  // Check environment variable overrides (for CI)
+  if (options.ci) {
+    if (process.env.WORKER_NAME && !options.workerName) {
+      options.workerName = process.env.WORKER_NAME;
+    }
+    if (process.env.CLOUDFLARE_TIER) {
+      const tier = process.env.CLOUDFLARE_TIER.toLowerCase();
+      if (tier === 'free' || tier === 'paid') {
+        options.tier = tier;
+      }
+    }
+    if (process.env.DOMAIN && !options.domain) {
+      options.domain = process.env.DOMAIN;
+    }
+    if (process.env.SKIP_UI_BUILD === 'true') {
+      options.skipUiBuild = true;
+    }
+    if (process.env.SKIP_MIGRATIONS === 'true') {
+      options.skipMigrations = true;
+    }
+  }
+  
+  return options;
+}
+
+// ============================================================================
+// Help Command
+// ============================================================================
+
+function showHelp() {
+  console.log(`
+PACKAGE.broker Cloudflare CLI
+
+Usage: package-broker-cloudflare [command] [options]
+
+Commands:
+  init     Interactive setup (default)
+  deploy   Deploy to Cloudflare Workers
+  help     Show this help message
+
+Options:
+  --ci               Non-interactive mode (no prompts)
+  --json             Output machine-readable JSON
+  --worker-name      Worker name (default: package-broker)
+  --tier             Cloudflare tier: free or paid (default: free)
+  --domain           Custom domain for routes
+  --skip-ui-build    Skip UI build step
+  --skip-migrations  Skip database migrations
+
+Environment Variables (CI mode):
+  CLOUDFLARE_API_TOKEN    Cloudflare API token (required)
+  CLOUDFLARE_ACCOUNT_ID   Cloudflare account ID (required)
+  ENCRYPTION_KEY          Base64-encoded encryption key (required)
+  WORKER_NAME             Worker name (overrides --worker-name)
+  CLOUDFLARE_TIER         Tier: free or paid (overrides --tier)
+  DOMAIN                  Custom domain (overrides --domain)
+  SKIP_UI_BUILD           Set to 'true' to skip UI build
+  SKIP_MIGRATIONS         Set to 'true' to skip migrations
+
+Examples:
+  # Interactive setup
+  npx package-broker-cloudflare init
+
+  # CI deployment
+  npx package-broker-cloudflare deploy --ci --json --worker-name my-broker
+
+  # Deploy with custom domain
+  npx package-broker-cloudflare deploy --ci --json --domain packages.example.com
+`);
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
 function generateEncryptionKey(): string {
   return randomBytes(32).toString('base64');
@@ -47,50 +242,7 @@ function validateWorkerName(name: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(name);
 }
 
-/**
- * Find @package-broker/main package in various locations
- */
-function findMainPackage(targetDir: string): string | null {
-  // Try standard node_modules location
-  const standardPath = join(
-    targetDir,
-    'node_modules',
-    '@package-broker',
-    'main'
-  );
-  if (existsSync(standardPath)) {
-    return standardPath;
-  }
-
-  // Try parent directory node_modules (workspace root)
-  const parentNodeModules = join(
-    targetDir,
-    '..',
-    'node_modules',
-    '@package-broker',
-    'main'
-  );
-  if (existsSync(parentNodeModules)) {
-    return parentNodeModules;
-  }
-
-  // Try monorepo structure (for development/testing)
-  // Check if we're in a monorepo by looking for packages/main relative to current dir
-  let currentPath = targetDir;
-  for (let i = 0; i < 5; i++) {
-    const monorepoPath = join(currentPath, 'packages', 'main');
-    if (existsSync(monorepoPath)) {
-      return monorepoPath;
-    }
-    const parentPath = join(currentPath, '..');
-    if (parentPath === currentPath) break; // Reached filesystem root
-    currentPath = parentPath;
-  }
-
-  return null;
-}
-
-async function copyMigrations(targetDir: string): Promise<number> {
+async function copyMigrations(targetDir: string, destDir?: string): Promise<number> {
   const mainPackagePath = findMainPackage(targetDir);
 
   if (!mainPackagePath) {
@@ -100,7 +252,7 @@ async function copyMigrations(targetDir: string): Promise<number> {
     );
   }
 
-  const migrationsDir = join(targetDir, 'migrations');
+  const migrationsDir = destDir || join(targetDir, 'migrations');
   if (!existsSync(migrationsDir)) {
     mkdirSync(migrationsDir, { recursive: true });
   }
@@ -124,7 +276,294 @@ async function copyMigrations(targetDir: string): Promise<number> {
   return migrationFiles.length;
 }
 
-async function main() {
+// ============================================================================
+// CI Deploy Flow
+// ============================================================================
+
+async function runCiDeploy(options: CLIOptions): Promise<void> {
+  const targetDir = process.cwd();
+  const jsonOutput = options.json;
+  
+  // Validate required environment variables
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  
+  if (!apiToken) {
+    const error = 'CLOUDFLARE_API_TOKEN environment variable is required';
+    ghAnnotation('error', error);
+    if (jsonOutput) {
+      outputJson({ error });
+    } else {
+      log(`✗ ${error}`, 'red');
+    }
+    process.exit(1);
+  }
+  
+  if (!accountId) {
+    const error = 'CLOUDFLARE_ACCOUNT_ID environment variable is required';
+    ghAnnotation('error', error);
+    if (jsonOutput) {
+      outputJson({ error });
+    } else {
+      log(`✗ ${error}`, 'red');
+    }
+    process.exit(1);
+  }
+  
+  if (!encryptionKey) {
+    const error = 'ENCRYPTION_KEY environment variable is required';
+    ghAnnotation('error', error);
+    if (jsonOutput) {
+      outputJson({ error });
+    } else {
+      log(`✗ ${error}`, 'red');
+    }
+    process.exit(1);
+  }
+  
+  // Validate worker name
+  const workerName = options.workerName || 'package-broker';
+  if (!validateWorkerName(workerName)) {
+    const error = `Invalid worker name: ${workerName}. Use only letters, numbers, hyphens, and underscores.`;
+    ghAnnotation('error', error);
+    if (jsonOutput) {
+      outputJson({ error });
+    } else {
+      log(`✗ ${error}`, 'red');
+    }
+    process.exit(1);
+  }
+  
+  const paidTier = options.tier === 'paid';
+  
+  // Wrangler options for all commands
+  const wranglerOpts: WranglerOptions = {
+    apiToken,
+    accountId,
+    cwd: targetDir,
+  };
+  
+  try {
+    // Check prerequisites
+    log('Checking prerequisites...', 'blue', { json: jsonOutput });
+    
+    const mainPackagePath = findMainPackage(targetDir);
+    if (!mainPackagePath) {
+      throw new Error('@package-broker/main not found. Run: npm install @package-broker/main');
+    }
+    
+    // Check authentication
+    log('Verifying Cloudflare authentication...', 'blue', { json: jsonOutput });
+    const isAuthenticated = await checkAuth(wranglerOpts);
+    if (!isAuthenticated) {
+      throw new Error('Cloudflare authentication failed. Check your API token.');
+    }
+    ghAnnotation('notice', 'Cloudflare authentication successful');
+    
+    // Verify token permissions
+    log('Verifying token permissions...', 'blue', { json: jsonOutput });
+    const permissions = await verifyTokenPermissions({ ...wranglerOpts, paidTier });
+    if (!permissions.valid) {
+      ghAnnotation('warning', `Token permission issues: ${permissions.errors.join(', ')}`);
+    }
+    
+    // Check for existing wrangler.toml and parse it
+    log('Checking for existing wrangler.toml...', 'blue', { json: jsonOutput });
+    const existingConfig = wranglerTomlExists(targetDir) ? parseWranglerToml(targetDir) : null;
+    const { needsDatabase, needsKV, needsR2, needsQueue, existingResources } = 
+      findMissingResources(existingConfig, workerName, paidTier);
+    
+    if (existingConfig) {
+      log('Found existing wrangler.toml, extracting resource IDs...', 'blue', { json: jsonOutput });
+      ghAnnotation('notice', 'Using existing wrangler.toml configuration');
+    }
+    
+    // Resource names
+    const dbName = existingResources.database_name || `${workerName}-db`;
+    const kvTitle = `${workerName}-kv`;
+    const r2Bucket = existingResources.r2_bucket_name || `${workerName}-artifacts`;
+    const queueName = paidTier ? (existingResources.queue_name || `${workerName}-queue`) : undefined;
+    
+    // Create/find missing resources
+    const resources: ResourceIds = { ...existingResources };
+    
+    if (needsDatabase) {
+      log(`Creating/finding D1 database: ${dbName}...`, 'blue', { json: jsonOutput });
+      const existingDbId = await findD1Database(dbName, wranglerOpts);
+      if (existingDbId) {
+        log(`Database already exists: ${existingDbId}`, 'green', { json: jsonOutput });
+        resources.database_id = existingDbId;
+      } else {
+        const newDbId = await createD1Database(dbName, wranglerOpts);
+        log(`Database created: ${newDbId}`, 'green', { json: jsonOutput });
+        resources.database_id = newDbId;
+      }
+      resources.database_name = dbName;
+    }
+    
+    if (needsKV) {
+      log(`Creating/finding KV namespace: ${kvTitle}...`, 'blue', { json: jsonOutput });
+      const existingKvId = await findKVNamespace(kvTitle, wranglerOpts);
+      if (existingKvId) {
+        log(`KV namespace already exists: ${existingKvId}`, 'green', { json: jsonOutput });
+        resources.kv_namespace_id = existingKvId;
+      } else {
+        const newKvId = await createKVNamespace(kvTitle, wranglerOpts);
+        log(`KV namespace created: ${newKvId}`, 'green', { json: jsonOutput });
+        resources.kv_namespace_id = newKvId;
+      }
+    }
+    
+    if (needsR2) {
+      log(`Creating/finding R2 bucket: ${r2Bucket}...`, 'blue', { json: jsonOutput });
+      const bucketExists = await findR2Bucket(r2Bucket, wranglerOpts);
+      if (bucketExists) {
+        log('R2 bucket already exists', 'green', { json: jsonOutput });
+      } else {
+        await createR2Bucket(r2Bucket, wranglerOpts);
+        log('R2 bucket created', 'green', { json: jsonOutput });
+      }
+      resources.r2_bucket_name = r2Bucket;
+    }
+    
+    if (needsQueue && queueName) {
+      log(`Creating/finding Queue: ${queueName}...`, 'blue', { json: jsonOutput });
+      const queueExists = await findQueue(queueName, wranglerOpts);
+      if (queueExists) {
+        log('Queue already exists', 'green', { json: jsonOutput });
+      } else {
+        await createQueue(queueName, wranglerOpts);
+        log('Queue created', 'green', { json: jsonOutput });
+      }
+      resources.queue_name = queueName;
+    }
+    
+    // Create ephemeral workspace
+    const ephemeralDir = join(tmpdir(), 'package-broker-cloudflare', `${workerName}-${Date.now()}`);
+    mkdirSync(ephemeralDir, { recursive: true });
+    log(`Created ephemeral workspace: ${ephemeralDir}`, 'blue', { json: jsonOutput });
+    
+    // Generate or merge wrangler.toml
+    log('Generating wrangler.toml...', 'blue', { json: jsonOutput });
+    let wranglerContent: string;
+    
+    const uiPackagePath = findUiPackage(targetDir);
+    const uiAssetsPath = uiPackagePath ? 'node_modules/@package-broker/ui/dist' : undefined;
+    
+    if (existingConfig?._raw) {
+      // Merge new resource IDs into existing config
+      wranglerContent = mergeResourcesIntoConfig(
+        existingConfig._raw,
+        resources,
+        workerName,
+        { paidTier, domain: options.domain }
+      );
+    } else {
+      // Generate new config
+      wranglerContent = generateWranglerToml(workerName, resources, {
+        paidTier,
+        domain: options.domain,
+        mainPath: 'node_modules/@package-broker/main/dist/index.js',
+        uiAssetsPath,
+      });
+    }
+    
+    const ephemeralConfigPath = join(ephemeralDir, 'wrangler.toml');
+    writeFileSync(ephemeralConfigPath, wranglerContent, 'utf-8');
+    
+    // Copy migrations to ephemeral directory
+    log('Copying migrations...', 'blue', { json: jsonOutput });
+    const migrationsDir = join(ephemeralDir, 'migrations');
+    const migrationCount = await copyMigrations(targetDir, migrationsDir);
+    log(`${migrationCount} migration files copied`, 'green', { json: jsonOutput });
+    
+    // Check/build UI
+    if (!options.skipUiBuild) {
+      log('Checking UI assets...', 'blue', { json: jsonOutput });
+      const uiDistPath = uiPackagePath ? join(uiPackagePath, 'dist') : null;
+      
+      if (!uiDistPath || !existsSync(uiDistPath)) {
+        ghAnnotation('warning', 'UI assets not found. UI may not be available.');
+        log('UI assets not found. Skipping UI...', 'yellow', { json: jsonOutput });
+      } else {
+        log('UI assets found', 'green', { json: jsonOutput });
+      }
+    }
+    
+    // Set encryption key as secret
+    log('Setting encryption key as secret...', 'blue', { json: jsonOutput });
+    await setSecret('ENCRYPTION_KEY', encryptionKey, {
+      ...wranglerOpts,
+      workerName,
+      configPath: ephemeralConfigPath,
+    });
+    log('Encryption key set', 'green', { json: jsonOutput });
+    
+    // Apply migrations
+    if (!options.skipMigrations) {
+      log('Applying database migrations...', 'blue', { json: jsonOutput });
+      try {
+        await applyMigrations(dbName, migrationsDir, {
+          ...wranglerOpts,
+          remote: true,
+          configPath: ephemeralConfigPath,
+        });
+        log('Migrations applied', 'green', { json: jsonOutput });
+      } catch (migrationError) {
+        ghAnnotation('warning', `Migration warning: ${(migrationError as Error).message}`);
+        log(`Migration warning: ${(migrationError as Error).message}`, 'yellow', { json: jsonOutput });
+      }
+    }
+    
+    // Deploy worker
+    log('Deploying Worker...', 'blue', { json: jsonOutput });
+    const workerUrl = await deployWorker({
+      ...wranglerOpts,
+      workerName,
+      configPath: ephemeralConfigPath,
+    });
+    
+    ghAnnotation('notice', `Deployment complete! Worker URL: ${workerUrl}`);
+    
+    // Output result
+    const result: DeployResult = {
+      worker_url: workerUrl,
+      database_id: resources.database_id || '',
+      kv_namespace_id: resources.kv_namespace_id || '',
+      r2_bucket_name: resources.r2_bucket_name || r2Bucket,
+      queue_name: resources.queue_name,
+    };
+    
+    if (jsonOutput) {
+      outputJson(result);
+    } else {
+      log(`\n✅ Deployment complete!`, 'bright');
+      log(`🌐 Worker URL: ${workerUrl}`, 'bright');
+      if (options.domain) {
+        log(`\n📝 Custom Domain Configuration Required:`, 'yellow');
+        log(`   Create a CNAME record pointing ${options.domain} to your worker`, 'yellow');
+      }
+    }
+    
+  } catch (error) {
+    const errorMessage = (error as Error).message;
+    ghAnnotation('error', errorMessage);
+    
+    if (jsonOutput) {
+      outputJson({ error: errorMessage });
+    } else {
+      log(`\n✗ Deployment failed: ${errorMessage}`, 'red');
+    }
+    process.exit(1);
+  }
+}
+
+// ============================================================================
+// Interactive Init Flow
+// ============================================================================
+
+async function runInteractiveInit(): Promise<void> {
   const targetDir = process.cwd();
 
   log('\n🚀 PACKAGE.broker - Cloudflare Workers Setup\n', 'bright');
@@ -333,20 +772,15 @@ async function main() {
 
   // Check if UI needs to be built
   log('\n🎨 Checking UI assets...', 'blue');
-  const uiPackagePath = join(
-    targetDir,
-    'node_modules',
-    '@package-broker',
-    'ui'
-  );
-  const uiDistPath = join(uiPackagePath, 'dist');
+  const uiPackagePath = findUiPackage(targetDir);
+  const uiDistPath = uiPackagePath ? join(uiPackagePath, 'dist') : null;
   
-  if (!existsSync(uiDistPath)) {
+  if (!uiDistPath || !existsSync(uiDistPath)) {
     log('⚠️  UI assets not found. Checking UI package...', 'yellow');
     try {
       const { execa } = await import('execa');
       // Check if UI package exists
-      if (existsSync(uiPackagePath)) {
+      if (uiPackagePath && existsSync(uiPackagePath)) {
         log('   Building UI...', 'blue');
         await execa('npm', ['run', 'build'], {
           cwd: uiPackagePath,
@@ -360,16 +794,17 @@ async function main() {
           stdio: 'pipe',
         });
         // Try to build after installation
-        if (existsSync(uiPackagePath)) {
+        const newUiPackagePath = findUiPackage(targetDir);
+        if (newUiPackagePath && existsSync(newUiPackagePath)) {
           log('   Building UI...', 'blue');
           await execa('npm', ['run', 'build'], {
-            cwd: uiPackagePath,
+            cwd: newUiPackagePath,
             stdio: 'pipe',
           });
           log('✓ UI built successfully', 'green');
         }
       }
-    } catch (error) {
+    } catch {
       log('⚠️  Failed to build UI. UI will not be available.', 'yellow');
       log('   You can build it manually: cd node_modules/@package-broker/ui && npm run build', 'yellow');
       log('   Or install @package-broker/ui which includes pre-built assets.', 'yellow');
@@ -436,8 +871,43 @@ async function main() {
   log('');
 }
 
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
+async function main() {
+  const options = parseArgs(process.argv);
+  
+  switch (options.command) {
+    case 'help':
+      showHelp();
+      break;
+      
+    case 'deploy':
+      if (options.ci) {
+        await runCiDeploy(options);
+      } else {
+        // Non-CI deploy - run interactive flow
+        await runInteractiveInit();
+      }
+      break;
+      
+    case 'init':
+    default:
+      await runInteractiveInit();
+      break;
+  }
+}
+
 main().catch((error) => {
-  log(`\n✗ Fatal error: ${error.message}`, 'red');
+  const isJsonMode = process.argv.includes('--json');
+  
+  if (isJsonMode) {
+    outputJson({ error: error.message });
+  } else {
+    log(`\n✗ Fatal error: ${error.message}`, 'red');
+  }
+  
+  ghAnnotation('error', `Fatal error: ${error.message}`);
   process.exit(1);
 });
-
