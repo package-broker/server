@@ -242,8 +242,8 @@ function PackageCard({ name, versions }: { name: string; versions: Package[] }) 
         aria-label={`${name} package, ${versions.length} versions`}
         data-testid="package-header"
       >
-        <div className="flex items-center gap-4 flex-1">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary-500/20 to-accent-500/20 rounded-lg flex items-center justify-center">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="w-10 h-10 bg-gradient-to-br from-primary-500/20 to-accent-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
             <PackageIcon className="w-5 h-5 text-primary-400" />
           </div>
           <div className="flex-1 min-w-0">
@@ -255,7 +255,7 @@ function PackageCard({ name, versions }: { name: string; versions: Package[] }) 
                   return `/packages/${vendor}/${packageName}`;
                 })()}
                 onClick={(e) => e.stopPropagation()}
-                className="font-medium text-slate-100 hover:text-primary-400 transition-colors"
+                className="font-medium text-slate-100 hover:text-primary-400 transition-colors truncate"
               >
                 {name}
               </Link>

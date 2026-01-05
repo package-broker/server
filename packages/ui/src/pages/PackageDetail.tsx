@@ -290,7 +290,7 @@ export function PackageDetail() {
       {/* Header */}
       <div className="card p-6">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2 flex-wrap">
               <h1 className="font-display text-3xl font-bold text-slate-100">
                 {packageData.name}
@@ -459,7 +459,7 @@ export function PackageDetail() {
               <div>
                 <label className="block text-sm text-slate-400 mb-2">Install via Composer</label>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-primary-300 font-mono break-all">
+                  <code className="flex-1 min-w-0 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-primary-300 font-mono break-all">
                     composer require {packageData.name}:{currentVersion.version}
                   </code>
                   <CopyButton text={`composer require ${packageData.name}:${currentVersion.version}`} />
@@ -498,11 +498,11 @@ export function PackageDetail() {
                     href={currentVersion.homepage}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-primary-400 hover:text-primary-300 transition-colors text-sm"
+                    className="flex items-center gap-2 text-primary-400 hover:text-primary-300 transition-colors text-sm min-w-0"
                   >
-                    <span>🌐</span>
-                    <span>{currentVersion.homepage}</span>
-                    <span className="text-slate-500">→</span>
+                    <span className="flex-shrink-0">🌐</span>
+                    <span className="truncate block min-w-0">{currentVersion.homepage}</span>
+                    <span className="text-slate-500 flex-shrink-0">→</span>
                   </a>
                 </div>
               )}
