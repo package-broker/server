@@ -510,6 +510,18 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
     const ephemeralConfigPath = join(ephemeralDir, 'wrangler.toml');
     writeFileSync(ephemeralConfigPath, wranglerContent, 'utf-8');
     
+    // Log resource IDs for debugging
+    log(`Resource IDs: database_id=${resources.database_id || 'MISSING'}, kv_namespace_id=${resources.kv_namespace_id || 'MISSING'}, r2_bucket_name=${resources.r2_bucket_name || 'MISSING'}`, 'blue', { json: jsonOutput });
+    ghAnnotation('notice', `Resources: DB=${resources.database_id?.substring(0, 8) || 'MISSING'}..., KV=${resources.kv_namespace_id?.substring(0, 8) || 'MISSING'}..., R2=${resources.r2_bucket_name || 'MISSING'}`);
+    
+    // Log wrangler.toml bindings for debugging
+    if (wranglerContent.includes('database_id')) {
+      const dbIdMatch = wranglerContent.match(/database_id\s*=\s*"([^"]+)"/);
+      const kvIdMatch = wranglerContent.match(/\[\[kv_namespaces\]\][^[]*id\s*=\s*"([^"]+)"/);
+      const r2Match = wranglerContent.match(/bucket_name\s*=\s*"([^"]+)"/);
+      ghAnnotation('notice', `wrangler.toml bindings: DB_ID=${dbIdMatch?.[1]?.substring(0, 8) || 'NOT_FOUND'}..., KV_ID=${kvIdMatch?.[1]?.substring(0, 8) || 'NOT_FOUND'}..., R2=${r2Match?.[1] || 'NOT_FOUND'}`);
+    }
+    
     // Copy migrations to ephemeral directory
     log('Copying migrations...', 'blue', { json: jsonOutput });
     const migrationsDir = join(ephemeralDir, 'migrations');
