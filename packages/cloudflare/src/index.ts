@@ -395,9 +395,26 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
         log(`Database already exists: ${existingDbId}`, 'green', { json: jsonOutput });
         resources.database_id = existingDbId;
       } else {
-        const newDbId = await createD1Database(dbName, wranglerOpts);
-        log(`Database created: ${newDbId}`, 'green', { json: jsonOutput });
-        resources.database_id = newDbId;
+        try {
+          const newDbId = await createD1Database(dbName, wranglerOpts);
+          log(`Database created: ${newDbId}`, 'green', { json: jsonOutput });
+          resources.database_id = newDbId;
+        } catch (createError) {
+          // If creation fails (e.g., database already exists), try to find it again
+          const errorMessage = (createError as Error).message.toLowerCase();
+          if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+            log('Creation failed (resource may already exist), attempting to find existing database...', 'yellow', { json: jsonOutput });
+            const foundDbId = await findD1Database(dbName, wranglerOpts);
+            if (foundDbId) {
+              log(`Found existing database: ${foundDbId}`, 'green', { json: jsonOutput });
+              resources.database_id = foundDbId;
+            } else {
+              throw new Error(`Database "${dbName}" appears to exist but could not retrieve its ID. Error: ${(createError as Error).message}`);
+            }
+          } else {
+            throw createError;
+          }
+        }
       }
       resources.database_name = dbName;
     }
@@ -409,9 +426,26 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
         log(`KV namespace already exists: ${existingKvId}`, 'green', { json: jsonOutput });
         resources.kv_namespace_id = existingKvId;
       } else {
-        const newKvId = await createKVNamespace(kvTitle, wranglerOpts);
-        log(`KV namespace created: ${newKvId}`, 'green', { json: jsonOutput });
-        resources.kv_namespace_id = newKvId;
+        try {
+          const newKvId = await createKVNamespace(kvTitle, wranglerOpts);
+          log(`KV namespace created: ${newKvId}`, 'green', { json: jsonOutput });
+          resources.kv_namespace_id = newKvId;
+        } catch (createError) {
+          // If creation fails (e.g., namespace already exists), try to find it again
+          const errorMessage = (createError as Error).message.toLowerCase();
+          if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+            log('Creation failed (resource may already exist), attempting to find existing KV namespace...', 'yellow', { json: jsonOutput });
+            const foundKvId = await findKVNamespace(kvTitle, wranglerOpts);
+            if (foundKvId) {
+              log(`Found existing KV namespace: ${foundKvId}`, 'green', { json: jsonOutput });
+              resources.kv_namespace_id = foundKvId;
+            } else {
+              throw new Error(`KV namespace "${kvTitle}" appears to exist but could not retrieve its ID. Error: ${(createError as Error).message}`);
+            }
+          } else {
+            throw createError;
+          }
+        }
       }
     }
     
