@@ -481,9 +481,23 @@ export function buildP2Response(
       dist.reference = pkg.dist_reference;
     }
 
+    let resolvedVersion = pkg.version;
+    let fullMetadata: any = null;
+
+    if (pkg.metadata) {
+      try {
+        fullMetadata = JSON.parse(pkg.metadata);
+        if (fullMetadata.version_normalized) {
+          resolvedVersion = fullMetadata.version_normalized;
+        }
+      } catch {
+        // If parsing fails, use stored version
+      }
+    }
+
     const versionData: any = {
       name: packageName,
-      version: pkg.version,
+      version: resolvedVersion,
       dist,
     };
     if (pkg.description) {
@@ -491,14 +505,12 @@ export function buildP2Response(
     }
     if (pkg.license) {
       try {
-        // License is stored as JSON string (for array support)
         const license = JSON.parse(pkg.license);
         if (typeof license === 'string' || Array.isArray(license)) {
           versionData.license = license;
         }
       } catch {
-        // If parsing fails, treat as plain string
-        versionData.license = pkg.license; // pkg.license is not null here due to if check
+        versionData.license = pkg.license;
       }
     }
     if (pkg.package_type) {
@@ -511,9 +523,7 @@ export function buildP2Response(
       versionData.time = new Date(pkg.released_at * 1000).toISOString();
     }
 
-    if (pkg.metadata) {
-      try {
-        const fullMetadata = JSON.parse(pkg.metadata);
+    if (fullMetadata) {
         if (fullMetadata.source !== null &&
           fullMetadata.source !== undefined &&
           fullMetadata.source !== '__unset' &&
@@ -577,15 +587,12 @@ export function buildP2Response(
         if (fullMetadata['notification-url'] !== undefined) {
           versionData['notification-url'] = fullMetadata['notification-url'];
         }
-      } catch (error) {
-        // If metadata parse fails, we still have all essential fields from database columns
-        const logger = getLogger();
-        logger.warn('Failed to parse stored metadata', {
-          packageName: pkg.name,
-          version: pkg.version,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
+    } else if (pkg.metadata) {
+      const logger = getLogger();
+      logger.warn('Failed to parse stored metadata', {
+        packageName: pkg.name,
+        version: pkg.version,
+      });
     }
 
     // Update dist with any metadata overrides
