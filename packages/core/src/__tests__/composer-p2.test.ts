@@ -302,7 +302,7 @@ describe('Composer p2 Response Generation', () => {
       expect(version).toBeDefined();
       expect(version!.version).toBe('103.0.7.0-patch8');
       // Original version should still be in metadata
-      const metadata = JSON.parse(mockPackages[0].metadata);
+      const metadata = JSON.parse(mockPackages[0].metadata!);
       expect(metadata.version).toBe('103.0.7-p8');
     });
 
@@ -330,7 +330,7 @@ describe('Composer p2 Response Generation', () => {
       expect(version).toBeDefined();
       expect(version!.version).toBe('7.17.3.0');
       // Original version should still be in metadata
-      const metadata = JSON.parse(mockPackages[0].metadata);
+      const metadata = JSON.parse(mockPackages[0].metadata!);
       expect(metadata.version).toBe('v7.17.3');
     });
   });
