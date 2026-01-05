@@ -395,9 +395,26 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
         log(`Database already exists: ${existingDbId}`, 'green', { json: jsonOutput });
         resources.database_id = existingDbId;
       } else {
-        const newDbId = await createD1Database(dbName, wranglerOpts);
-        log(`Database created: ${newDbId}`, 'green', { json: jsonOutput });
-        resources.database_id = newDbId;
+        try {
+          const newDbId = await createD1Database(dbName, wranglerOpts);
+          log(`Database created: ${newDbId}`, 'green', { json: jsonOutput });
+          resources.database_id = newDbId;
+        } catch (createError) {
+          // If creation fails (e.g., database already exists), try to find it again
+          const errorMessage = (createError as Error).message.toLowerCase();
+          if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+            log('Creation failed (resource may already exist), attempting to find existing database...', 'yellow', { json: jsonOutput });
+            const foundDbId = await findD1Database(dbName, wranglerOpts);
+            if (foundDbId) {
+              log(`Found existing database: ${foundDbId}`, 'green', { json: jsonOutput });
+              resources.database_id = foundDbId;
+            } else {
+              throw new Error(`Database "${dbName}" appears to exist but could not retrieve its ID. Error: ${(createError as Error).message}`);
+            }
+          } else {
+            throw createError;
+          }
+        }
       }
       resources.database_name = dbName;
     }
@@ -409,9 +426,26 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
         log(`KV namespace already exists: ${existingKvId}`, 'green', { json: jsonOutput });
         resources.kv_namespace_id = existingKvId;
       } else {
-        const newKvId = await createKVNamespace(kvTitle, wranglerOpts);
-        log(`KV namespace created: ${newKvId}`, 'green', { json: jsonOutput });
-        resources.kv_namespace_id = newKvId;
+        try {
+          const newKvId = await createKVNamespace(kvTitle, wranglerOpts);
+          log(`KV namespace created: ${newKvId}`, 'green', { json: jsonOutput });
+          resources.kv_namespace_id = newKvId;
+        } catch (createError) {
+          // If creation fails (e.g., namespace already exists), try to find it again
+          const errorMessage = (createError as Error).message.toLowerCase();
+          if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+            log('Creation failed (resource may already exist), attempting to find existing KV namespace...', 'yellow', { json: jsonOutput });
+            const foundKvId = await findKVNamespace(kvTitle, wranglerOpts);
+            if (foundKvId) {
+              log(`Found existing KV namespace: ${foundKvId}`, 'green', { json: jsonOutput });
+              resources.kv_namespace_id = foundKvId;
+            } else {
+              throw new Error(`KV namespace "${kvTitle}" appears to exist but could not retrieve its ID. Error: ${(createError as Error).message}`);
+            }
+          } else {
+            throw createError;
+          }
+        }
       }
     }
     
@@ -475,6 +509,18 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
     
     const ephemeralConfigPath = join(ephemeralDir, 'wrangler.toml');
     writeFileSync(ephemeralConfigPath, wranglerContent, 'utf-8');
+    
+    // Log resource IDs for debugging
+    log(`Resource IDs: database_id=${resources.database_id || 'MISSING'}, kv_namespace_id=${resources.kv_namespace_id || 'MISSING'}, r2_bucket_name=${resources.r2_bucket_name || 'MISSING'}`, 'blue', { json: jsonOutput });
+    ghAnnotation('notice', `Resources: DB=${resources.database_id?.substring(0, 8) || 'MISSING'}..., KV=${resources.kv_namespace_id?.substring(0, 8) || 'MISSING'}..., R2=${resources.r2_bucket_name || 'MISSING'}`);
+    
+    // Log wrangler.toml bindings for debugging
+    if (wranglerContent.includes('database_id')) {
+      const dbIdMatch = wranglerContent.match(/database_id\s*=\s*"([^"]+)"/);
+      const kvIdMatch = wranglerContent.match(/\[\[kv_namespaces\]\][^[]*id\s*=\s*"([^"]+)"/);
+      const r2Match = wranglerContent.match(/bucket_name\s*=\s*"([^"]+)"/);
+      ghAnnotation('notice', `wrangler.toml bindings: DB_ID=${dbIdMatch?.[1]?.substring(0, 8) || 'NOT_FOUND'}..., KV_ID=${kvIdMatch?.[1]?.substring(0, 8) || 'NOT_FOUND'}..., R2=${r2Match?.[1] || 'NOT_FOUND'}`);
+    }
     
     // Copy migrations to ephemeral directory
     log('Copying migrations...', 'blue', { json: jsonOutput });

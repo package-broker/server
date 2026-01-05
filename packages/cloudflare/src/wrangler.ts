@@ -557,12 +557,18 @@ export async function deployWorker(
   options?: WranglerOptions & { workerName?: string }
 ): Promise<string> {
   const { stdout, stderr } = await execWrangler(['deploy'], options);
+  
+  // Log deploy output for debugging (goes to stderr in JSON mode)
+  if (process.env.DEBUG || process.env.CI) {
+    console.error(`[DEBUG] Wrangler deploy stdout: ${stdout.substring(0, 500)}...`);
+    console.error(`[DEBUG] Wrangler deploy stderr: ${stderr.substring(0, 500)}...`);
+  }
 
   // Check for deployment errors
   if (stderr && !stderr.includes('Successfully') && !stderr.includes('deployed')) {
     const errorMatch = stderr.match(/\[ERROR\][^\n]+/);
     if (errorMatch) {
-      throw new Error(`Deployment failed: ${errorMatch[0]}`);
+      throw new Error(`Deployment failed: ${errorMatch[0]}\nFull output: ${stdout}\n${stderr}`);
     }
   }
 
