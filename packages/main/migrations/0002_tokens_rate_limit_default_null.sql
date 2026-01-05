@@ -1,9 +1,6 @@
 -- Tokens: make rate_limit_max default NULL (unlimited)
 -- D1/SQLite doesn't support altering column defaults directly, so rebuild the table.
 
-PRAGMA foreign_keys=OFF;
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS tokens_new (
   id TEXT PRIMARY KEY,
   description TEXT NOT NULL,
@@ -23,8 +20,5 @@ DROP TABLE tokens;
 ALTER TABLE tokens_new RENAME TO tokens;
 
 CREATE INDEX IF NOT EXISTS idx_tokens_token_hash ON tokens(token_hash);
-
-COMMIT;
-PRAGMA foreign_keys=ON;
 
 

@@ -6,6 +6,7 @@
 
 import type { OpenAPIContext } from '../../routes/api/types';
 import type { DatabasePort } from '../../ports';
+import type { AppBindings, AppVariables } from '../../factory';
 import { repositories, artifacts, packages } from '../../db/schema';
 import { eq, sql, and } from 'drizzle-orm';
 import { updatePackagistMirroringRequestSchema } from '@package-broker/shared';
@@ -20,17 +21,22 @@ export interface StatsRouteEnv {
 }
 
 export interface SettingsRouteEnv {
-  Bindings: {
-    KV?: KVNamespace;
-  };
+  Bindings: AppBindings;
+  Variables: AppVariables;
 }
 
 const SETTINGS_PREFIX = 'settings:';
 export const PACKAGIST_MIRRORING_KEY = `${SETTINGS_PREFIX}packagist_mirroring_enabled`;
 export const PACKAGE_CACHING_KEY = `${SETTINGS_PREFIX}package_caching_enabled`;
 
-function isKvAvailable(kv: KVNamespace | undefined): boolean {
-  return kv !== undefined && kv !== null;
+function isKvAvailable(kv: KVNamespace | undefined | null): boolean {
+  // Check if KV is available - handle both undefined and null cases
+  // Also check if it's actually a KVNamespace object (has required methods)
+  if (kv === undefined || kv === null) {
+    return false;
+  }
+  // Verify it's actually a KVNamespace by checking for required methods
+  return typeof kv.get === 'function' && typeof kv.put === 'function';
 }
 
 export async function getStats(c: OpenAPIContext<StatsRouteEnv>): Promise<Response> {
@@ -85,12 +91,14 @@ export async function getPackageStats(c: OpenAPIContext<StatsRouteEnv>): Promise
 }
 
 export async function getSettings(c: OpenAPIContext<SettingsRouteEnv>): Promise<Response> {
-  const kvAvailable = isKvAvailable(c.env.KV);
-  const packagistMirroringEnabled = kvAvailable && c.env.KV
-    ? await c.env.KV.get(PACKAGIST_MIRRORING_KEY)
+  const kv = c.env.KV as KVNamespace | undefined;
+  const kvAvailable = isKvAvailable(kv);
+  
+  const packagistMirroringEnabled = kvAvailable && kv
+    ? await kv.get(PACKAGIST_MIRRORING_KEY)
     : null;
-  const packageCachingEnabled = kvAvailable && c.env.KV
-    ? await c.env.KV.get(PACKAGE_CACHING_KEY)
+  const packageCachingEnabled = kvAvailable && kv
+    ? await kv.get(PACKAGE_CACHING_KEY)
     : null;
 
   return c.json({
@@ -109,14 +117,15 @@ export async function updatePackagistMirroring(
     return c.json({ error: 'Bad Request', message: 'enabled must be a boolean' }, 400);
   }
 
-  if (!isKvAvailable(c.env.KV) || !c.env.KV) {
+  const kv = c.env.KV as KVNamespace | undefined;
+  if (!isKvAvailable(kv) || !kv) {
     return c.json({ 
       error: 'Service Unavailable', 
       message: 'KV namespace is required for this setting. Please configure KV in your wrangler.toml.' 
     }, 503);
   }
 
-  await c.env.KV.put(PACKAGIST_MIRRORING_KEY, String(body.enabled));
+  await kv.put(PACKAGIST_MIRRORING_KEY, String(body.enabled));
 
   return c.json({
     packagist_mirroring_enabled: body.enabled,
@@ -126,7 +135,7 @@ export async function updatePackagistMirroring(
   });
 }
 
-export async function isPackagistMirroringEnabled(kv: KVNamespace | undefined): Promise<boolean> {
+export async function isPackagistMirroringEnabled(kv: KVNamespace | undefined | null): Promise<boolean> {
   if (!isKvAvailable(kv) || !kv) {
     return false;
   }
@@ -134,7 +143,7 @@ export async function isPackagistMirroringEnabled(kv: KVNamespace | undefined): 
   return value === null || value === 'true';
 }
 
-export async function isPackageCachingEnabled(kv: KVNamespace | undefined): Promise<boolean> {
+export async function isPackageCachingEnabled(kv: KVNamespace | undefined | null): Promise<boolean> {
   if (!isKvAvailable(kv) || !kv) {
     return false;
   }

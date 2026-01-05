@@ -78,11 +78,9 @@ export function Tokens() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Permissions
                 </th>
-                {kvAvailable && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                    Rate Limit
-                  </th>
-                )}
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  Rate Limit
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Created
                 </th>
@@ -152,11 +150,10 @@ function TokenRow({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [description, setDescription] = useState(token.description);
-  const [rateLimitEnabled, setRateLimitEnabled] = useState(
-    kvAvailable && !!token.rate_limit_max && token.rate_limit_max > 0
-  );
+  const hasRateLimit = !!token.rate_limit_max && token.rate_limit_max > 0;
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(kvAvailable && hasRateLimit);
   const [rateLimit, setRateLimit] = useState<string>(
-    token.rate_limit_max && token.rate_limit_max > 0 ? String(token.rate_limit_max) : ''
+    hasRateLimit ? String(token.rate_limit_max) : ''
   );
 
   const handleSave = () => {
@@ -172,9 +169,10 @@ function TokenRow({
   };
 
   const handleCancel = () => {
+    const hasRateLimit = !!token.rate_limit_max && token.rate_limit_max > 0;
     setDescription(token.description);
-    setRateLimitEnabled(kvAvailable && !!token.rate_limit_max && token.rate_limit_max > 0);
-    setRateLimit(token.rate_limit_max && token.rate_limit_max > 0 ? String(token.rate_limit_max) : '');
+    setRateLimitEnabled(kvAvailable && hasRateLimit);
+    setRateLimit(hasRateLimit ? String(token.rate_limit_max) : '');
     setIsEditing(false);
   };
 
@@ -210,45 +208,49 @@ function TokenRow({
           )}
         </div>
       </td>
-      {kvAvailable && (
-        <td className="px-6 py-4 text-sm text-slate-400">
-          {isEditing ? (
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={rateLimitEnabled}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    setRateLimitEnabled(enabled);
-                    if (enabled && rateLimit === '') {
-                      setRateLimit('1000');
-                    }
-                    if (!enabled) {
-                      setRateLimit('');
-                    }
-                  }}
-                />
-                Enabled
-              </label>
+      <td className="px-6 py-4 text-sm text-slate-400">
+        {isEditing ? (
+          <div className="space-y-2">
+            {!kvAvailable && (
+              <p className="text-xs text-slate-500 italic">Configure KV to enable rate limiting</p>
+            )}
+            <label className="flex items-center gap-2 text-xs text-slate-300">
               <input
-                type="number"
-                value={rateLimit}
-                onChange={(e) => setRateLimit(e.target.value)}
-                min={0}
-                max={25000}
-                className="input w-40 text-sm"
-                disabled={!rateLimitEnabled}
-                placeholder="Unlimited"
+                type="checkbox"
+                checked={rateLimitEnabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setRateLimitEnabled(enabled);
+                  if (enabled && rateLimit === '') {
+                    setRateLimit('1000');
+                  }
+                  if (!enabled) {
+                    setRateLimit('');
+                  }
+                }}
+                disabled={!kvAvailable}
               />
-            </div>
-          ) : (
-            token.rate_limit_max === null || token.rate_limit_max === 0
+              Enabled
+            </label>
+            <input
+              type="number"
+              value={rateLimit}
+              onChange={(e) => setRateLimit(e.target.value)}
+              min={0}
+              max={25000}
+              className="input w-40 text-sm"
+              disabled={!rateLimitEnabled || !kvAvailable}
+              placeholder="Unlimited"
+            />
+          </div>
+        ) : (
+          !kvAvailable
+            ? <span className="text-slate-500 italic">KV not configured</span>
+            : token.rate_limit_max === null || token.rate_limit_max === 0
               ? 'Unlimited'
               : `${token.rate_limit_max.toLocaleString()}/hour`
-          )}
-        </td>
-      )}
+        )}
+      </td>
       <td className="px-6 py-4 text-sm text-slate-400">
         {new Date(token.created_at * 1000).toLocaleString()}
       </td>
@@ -490,43 +492,45 @@ function GenerateTokenModal({
             </div>
           </div>
 
-          {kvAvailable && (
-            <div>
-              <label className="label">Rate Limit (requests/hour)</label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={rateLimitEnabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      setRateLimitEnabled(enabled);
-                      if (enabled && rateLimit === '') {
-                        setRateLimit('1000');
-                      }
-                      if (!enabled) {
-                        setRateLimit('');
-                      }
-                    }}
-                  />
-                  Enable rate limiting
-                </label>
+          <div>
+            <label className="label">Rate Limit (requests/hour)</label>
+            <div className="space-y-2">
+              {!kvAvailable && (
+                <p className="text-xs text-slate-500 italic">Configure KV to enable rate limiting</p>
+              )}
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
-                  type="number"
-                  value={rateLimit}
-                  onChange={(e) => setRateLimit(e.target.value)}
-                  placeholder="Unlimited"
-                  min={0}
-                  max={25000}
-                  className="input w-full"
-                  disabled={!rateLimitEnabled}
+                  type="checkbox"
+                  checked={rateLimitEnabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setRateLimitEnabled(enabled);
+                    if (enabled && rateLimit === '') {
+                      setRateLimit('1000');
+                    }
+                    if (!enabled) {
+                      setRateLimit('');
+                    }
+                  }}
+                  disabled={!kvAvailable}
                 />
-                <p className="text-xs text-slate-400">
+                Enable rate limiting
+              </label>
+              <input
+                type="number"
+                value={rateLimit}
+                onChange={(e) => setRateLimit(e.target.value)}
+                placeholder="Unlimited"
+                min={0}
+                max={25000}
+                className="input w-full"
+                disabled={!rateLimitEnabled || !kvAvailable}
+              />
+              <p className="text-xs text-slate-400">
                   When disabled, no rate limit is enforced (no KV operations).
                 </p>
-              </div>
             </div>
-          )}
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">
