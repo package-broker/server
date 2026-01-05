@@ -481,23 +481,27 @@ export function buildP2Response(
       dist.reference = pkg.dist_reference;
     }
 
-    let resolvedVersion = pkg.version;
     let fullMetadata: any = null;
 
     if (pkg.metadata) {
       try {
         fullMetadata = JSON.parse(pkg.metadata);
-        if (fullMetadata.version_normalized) {
-          resolvedVersion = fullMetadata.version_normalized;
-        }
       } catch {
-        // If parsing fails, use stored version
       }
     }
 
+    const displayVersion: string = (fullMetadata?.version && typeof fullMetadata.version === 'string')
+      ? fullMetadata.version
+      : pkg.version;
+
+    const normalizedVersion: string | undefined = (fullMetadata?.version_normalized && typeof fullMetadata.version_normalized === 'string')
+      ? fullMetadata.version_normalized
+      : deriveVersionNormalized(displayVersion);
+
     const versionData: any = {
       name: packageName,
-      version: resolvedVersion,
+      version: displayVersion,
+      ...(normalizedVersion ? { version_normalized: normalizedVersion } : {}),
       dist,
     };
     if (pkg.description) {
@@ -606,6 +610,27 @@ export function buildP2Response(
       [packageName]: versions,
     },
   };
+}
+
+function deriveVersionNormalized(version: string): string | undefined {
+  const v = version.startsWith('v') ? version.slice(1) : version;
+
+  const patchMatch = v.match(/^(\d+\.\d+\.\d+)-p(\d+)$/);
+  if (patchMatch) {
+    const [, base, patch] = patchMatch;
+    return `${base}.0-patch${patch}`;
+  }
+
+  const numericMatch = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?$/);
+  if (numericMatch) {
+    const major = numericMatch[1];
+    const minor = numericMatch[2] ?? '0';
+    const patch = numericMatch[3] ?? '0';
+    const build = numericMatch[4] ?? '0';
+    return `${major}.${minor}.${patch}.${build}`;
+  }
+
+  return undefined;
 }
 
 /**
