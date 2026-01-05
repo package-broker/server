@@ -272,6 +272,18 @@ export async function createD1Database(
 ): Promise<string> {
   const { stdout, stderr } = await execWrangler(['d1', 'create', name], options);
 
+  // Check if database already exists
+  const output = (stdout + stderr).toLowerCase();
+  if (output.includes('already exists') || output.includes('duplicate')) {
+    // Database already exists, try to find its ID
+    const existingId = await findD1Database(name, options);
+    if (existingId) {
+      return existingId;
+    }
+    // If we can't find it, throw a helpful error
+    throw new Error(`Database "${name}" already exists but could not retrieve its ID. Please check your Cloudflare account.`);
+  }
+
   // Try to parse JSON output first
   try {
     const json = JSON.parse(stdout);
