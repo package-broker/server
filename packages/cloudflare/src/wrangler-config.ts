@@ -394,10 +394,11 @@ export function generateWranglerToml(
   lines.push(generateResourceBindings(workerName, resources, options.paidTier));
   
   // Custom domain routes
+  // Note: custom_domain = true requires the pattern WITHOUT the /* suffix
   if (options.domain) {
     lines.push('# Custom domain route');
     lines.push('[[routes]]');
-    lines.push(`pattern = "${options.domain}/*"`);
+    lines.push(`pattern = "${options.domain}"`);
     lines.push('custom_domain = true');
     lines.push('');
   }
@@ -464,6 +465,7 @@ max_batch_timeout = 30`
   }
   
   // Add custom domain route if provided and not already present
+  // Note: custom_domain = true requires the pattern WITHOUT the /* suffix
   if (options.domain && !content.includes(`pattern = "${options.domain}`)) {
     // Check if routes section exists
     if (!content.includes('[[routes]]')) {
@@ -471,7 +473,7 @@ max_batch_timeout = 30`
 
 # Custom domain route
 [[routes]]
-pattern = "${options.domain}/*"
+pattern = "${options.domain}"
 custom_domain = true
 `;
     }
