@@ -449,7 +449,11 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
     let wranglerContent: string;
     
     const uiPackagePath = findUiPackage(targetDir);
-    const uiAssetsPath = uiPackagePath ? 'node_modules/@package-broker/ui/dist' : undefined;
+    const uiAssetsPath = uiPackagePath ? join(targetDir, 'node_modules/@package-broker/ui/dist') : undefined;
+    
+    // Use absolute path for main file so wrangler can resolve it correctly
+    // even when config file is in a different directory
+    const mainPath = join(targetDir, 'node_modules/@package-broker/main/dist/index.js');
     
     if (existingConfig?._raw) {
       // Merge new resource IDs into existing config
@@ -464,7 +468,7 @@ async function runCiDeploy(options: CLIOptions): Promise<void> {
       wranglerContent = generateWranglerToml(workerName, resources, {
         paidTier,
         domain: options.domain,
-        mainPath: 'node_modules/@package-broker/main/dist/index.js',
+        mainPath,
         uiAssetsPath,
       });
     }
