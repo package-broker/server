@@ -95,10 +95,8 @@ export async function createToken(c: OpenAPIContext<TokensRouteEnv, ReturnType<t
   const token = generateToken(); // Generate high-entropy token
   const tokenHash = hashToken(token);
 
-  // Use provided rate_limit_max, or default to 1000 only if not explicitly set to null/0
-  const rateLimitMax = validated.rate_limit_max !== null && validated.rate_limit_max !== undefined
-    ? validated.rate_limit_max
-    : 1000;
+  const rateLimitMax =
+    validated.rate_limit_max && validated.rate_limit_max > 0 ? validated.rate_limit_max : null;
 
   await db.insert(tokens).values({
     id: tokenId,
@@ -201,8 +199,8 @@ export async function updateToken(c: OpenAPIContext<TokensRouteEnv, ReturnType<t
     updateData.description = validated.description;
   }
   if (validated.rate_limit_max !== undefined) {
-    // Allow null/0 to disable rate limiting
-    updateData.rate_limit_max = validated.rate_limit_max;
+    updateData.rate_limit_max =
+      validated.rate_limit_max && validated.rate_limit_max > 0 ? validated.rate_limit_max : null;
   }
 
   // Only update if there are fields to update

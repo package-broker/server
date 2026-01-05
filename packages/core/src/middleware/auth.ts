@@ -154,41 +154,40 @@ export async function distAuthMiddleware(
 
   const tokenHash = hashToken(token);
 
-  // Check cache first (5 second TTL for burst request optimization)
-  const cacheKey = `token:${tokenHash}`;
-  let tokenRecord: (typeof tokens.$inferSelect) | null = null;
+  // Query D1 first to check if rate limiting is enabled
+  // We need this to decide whether to use KV cache (skip KV ops if rate limiting is disabled)
+  const db = c.get('database');
+  const [dbToken] = await db
+    .select()
+    .from(tokens)
+    .where(eq(tokens.token_hash, tokenHash))
+    .limit(1);
 
-  try {
-    const cached = c.env.KV ? await c.env.KV.get(cacheKey, 'json') as (typeof tokens.$inferSelect) | null : null;
-    if (cached) {
-      // Verify token hasn't expired
-      if (!cached.expires_at || cached.expires_at >= Date.now() / 1000) {
-        tokenRecord = cached;
+  let tokenRecord: (typeof tokens.$inferSelect) | null = dbToken || null;
+
+  // Only use KV cache if rate limiting is enabled (rate_limit_max > 0) and KV is available
+  // This avoids unnecessary KV operations when rate limiting is disabled
+  if (tokenRecord && tokenRecord.rate_limit_max && tokenRecord.rate_limit_max > 0 && c.env.KV) {
+    const cacheKey = `token:${tokenHash}`;
+    try {
+      const cached = await c.env.KV.get(cacheKey, 'json') as (typeof tokens.$inferSelect) | null;
+      if (cached) {
+        // Verify token hasn't expired
+        if (!cached.expires_at || cached.expires_at >= Date.now() / 1000) {
+          tokenRecord = cached;
+        }
       }
+    } catch {
+      // Cache miss or error - use D1 result
     }
-  } catch {
-    // Cache miss or error - fall through to D1 query
-  }
 
-  // If not in cache, query D1
-  if (!tokenRecord) {
-    const db = c.get('database');
-    const [dbToken] = await db
-      .select()
-      .from(tokens)
-      .where(eq(tokens.token_hash, tokenHash))
-      .limit(1);
-
-    if (dbToken) {
-      tokenRecord = dbToken;
-      // Cache for 5 seconds to handle burst requests (if KV available)
-      if (c.env.KV) {
-        c.executionCtx.waitUntil(
-          c.env.KV.put(cacheKey, JSON.stringify(dbToken), { expirationTtl: 5 }).catch(() => {
-            // Ignore cache errors
-          })
-        );
-      }
+    // Cache for 5 seconds to handle burst requests (only if rate limiting is enabled)
+    if (tokenRecord) {
+      c.executionCtx.waitUntil(
+        c.env.KV.put(cacheKey, JSON.stringify(tokenRecord), { expirationTtl: 5 }).catch(() => {
+          // Ignore cache errors
+        })
+      );
     }
   }
 
@@ -278,41 +277,40 @@ export async function authMiddleware(
 
   const tokenHash = hashToken(token);
 
-  // Check cache first (5 second TTL for burst request optimization)
-  const cacheKey = `token:${tokenHash}`;
-  let tokenRecord: (typeof tokens.$inferSelect) | null = null;
+  // Query D1 first to check if rate limiting is enabled
+  // We need this to decide whether to use KV cache (skip KV ops if rate limiting is disabled)
+  const db = c.get('database');
+  const [dbToken] = await db
+    .select()
+    .from(tokens)
+    .where(eq(tokens.token_hash, tokenHash))
+    .limit(1);
 
-  try {
-    const cached = c.env.KV ? await c.env.KV.get(cacheKey, 'json') as (typeof tokens.$inferSelect) | null : null;
-    if (cached) {
-      // Verify token hasn't expired
-      if (!cached.expires_at || cached.expires_at >= Date.now() / 1000) {
-        tokenRecord = cached;
+  let tokenRecord: (typeof tokens.$inferSelect) | null = dbToken || null;
+
+  // Only use KV cache if rate limiting is enabled (rate_limit_max > 0) and KV is available
+  // This avoids unnecessary KV operations when rate limiting is disabled
+  if (tokenRecord && tokenRecord.rate_limit_max && tokenRecord.rate_limit_max > 0 && c.env.KV) {
+    const cacheKey = `token:${tokenHash}`;
+    try {
+      const cached = await c.env.KV.get(cacheKey, 'json') as (typeof tokens.$inferSelect) | null;
+      if (cached) {
+        // Verify token hasn't expired
+        if (!cached.expires_at || cached.expires_at >= Date.now() / 1000) {
+          tokenRecord = cached;
+        }
       }
+    } catch {
+      // Cache miss or error - use D1 result
     }
-  } catch {
-    // Cache miss or error - fall through to D1 query
-  }
 
-  // If not in cache, query D1
-  if (!tokenRecord) {
-    const db = c.get('database');
-    const [dbToken] = await db
-      .select()
-      .from(tokens)
-      .where(eq(tokens.token_hash, tokenHash))
-      .limit(1);
-
-    if (dbToken) {
-      tokenRecord = dbToken;
-      // Cache for 5 seconds to handle burst requests (if KV available)
-      if (c.env.KV) {
-        c.executionCtx.waitUntil(
-          c.env.KV.put(cacheKey, JSON.stringify(dbToken), { expirationTtl: 5 }).catch(() => {
-            // Ignore cache errors
-          })
-        );
-      }
+    // Cache for 5 seconds to handle burst requests (only if rate limiting is enabled)
+    if (tokenRecord) {
+      c.executionCtx.waitUntil(
+        c.env.KV.put(cacheKey, JSON.stringify(tokenRecord), { expirationTtl: 5 }).catch(() => {
+          // Ignore cache errors
+        })
+      );
     }
   }
 
@@ -325,7 +323,6 @@ export async function authMiddleware(
     return c.json({ error: 'Unauthorized', message: 'Token expired' }, 401);
   }
 
-  // Check rate limit (skip if null/0 to avoid KV operations)
   const rateLimitMax = tokenRecord.rate_limit_max;
   const rateLimit = await checkRateLimit(c.env.KV, tokenRecord.id, rateLimitMax);
   if (!rateLimit.allowed) {

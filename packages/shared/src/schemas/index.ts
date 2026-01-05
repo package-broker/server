@@ -50,7 +50,7 @@ export const tokenPermissionsSchema = z.enum(['readonly', 'write']);
 export const createTokenSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   permissions: tokenPermissionsSchema.default('readonly'),
-  rate_limit_max: z.number().int().min(0).max(25000, 'Rate limit cannot exceed 25,000 requests/hour').nullable().default(1000),
+  rate_limit_max: z.number().int().min(0).max(25000, 'Rate limit cannot exceed 25,000 requests/hour').nullable().default(null),
   expires_at: z.number().int().positive().optional(),
 });
 

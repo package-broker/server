@@ -481,39 +481,53 @@ export function buildP2Response(
       dist.reference = pkg.dist_reference;
     }
 
-    const versionData: any = {
-      name: packageName,
-      version: pkg.version,
-      dist,
-    };
-    if (pkg.description) {
-      versionData.description = pkg.description;
-    }
-    if (pkg.license) {
-      try {
-        // License is stored as JSON string (for array support)
-        const license = JSON.parse(pkg.license);
-        if (typeof license === 'string' || Array.isArray(license)) {
-          versionData.license = license;
-        }
-      } catch {
-        // If parsing fails, treat as plain string
-        versionData.license = pkg.license; // pkg.license is not null here due to if check
-      }
-    }
-    if (pkg.package_type) {
-      versionData.type = pkg.package_type;
-    }
-    if (pkg.homepage) {
-      versionData.homepage = pkg.homepage;
-    }
-    if (pkg.released_at) {
-      versionData.time = new Date(pkg.released_at * 1000).toISOString();
-    }
+    let fullMetadata: any = null;
 
     if (pkg.metadata) {
       try {
-        const fullMetadata = JSON.parse(pkg.metadata);
+        fullMetadata = JSON.parse(pkg.metadata);
+      } catch {
+      }
+    }
+
+    const displayVersion: string =
+      typeof fullMetadata?.version === 'string' ? fullMetadata.version : pkg.version;
+
+    const normalizedVersion: string | undefined =
+      typeof fullMetadata?.version_normalized === 'string'
+        ? fullMetadata.version_normalized
+        : deriveVersionNormalized(displayVersion);
+
+    const versionDataBase: any = {
+      name: packageName,
+      version: displayVersion,
+      ...(normalizedVersion ? { version_normalized: normalizedVersion } : {}),
+      dist,
+    };
+    if (pkg.description) {
+      versionDataBase.description = pkg.description;
+    }
+    if (pkg.license) {
+      try {
+        const license = JSON.parse(pkg.license);
+        if (typeof license === 'string' || Array.isArray(license)) {
+          versionDataBase.license = license;
+        }
+      } catch {
+        versionDataBase.license = pkg.license;
+      }
+    }
+    if (pkg.package_type) {
+      versionDataBase.type = pkg.package_type;
+    }
+    if (pkg.homepage) {
+      versionDataBase.homepage = pkg.homepage;
+    }
+    if (pkg.released_at) {
+      versionDataBase.time = new Date(pkg.released_at * 1000).toISOString();
+    }
+
+    if (fullMetadata) {
         if (fullMetadata.source !== null &&
           fullMetadata.source !== undefined &&
           fullMetadata.source !== '__unset' &&
@@ -521,7 +535,7 @@ export function buildP2Response(
           !Array.isArray(fullMetadata.source) &&
           typeof fullMetadata.source.type === 'string' &&
           typeof fullMetadata.source.url === 'string') {
-          versionData.source = {
+          versionDataBase.source = {
             type: fullMetadata.source.type,
             url: fullMetadata.source.url,
             ...(fullMetadata.source.reference && { reference: fullMetadata.source.reference }),
@@ -535,63 +549,68 @@ export function buildP2Response(
           dist.shasum = fullMetadata.dist.shasum;
         }
         if (fullMetadata.require && typeof fullMetadata.require === 'object' && !Array.isArray(fullMetadata.require)) {
-          versionData.require = fullMetadata.require;
+          versionDataBase.require = fullMetadata.require;
         }
         if (fullMetadata['require-dev'] && typeof fullMetadata['require-dev'] === 'object' && !Array.isArray(fullMetadata['require-dev'])) {
-          versionData['require-dev'] = fullMetadata['require-dev'];
+          versionDataBase['require-dev'] = fullMetadata['require-dev'];
         }
         if (fullMetadata.autoload && typeof fullMetadata.autoload === 'object' && !Array.isArray(fullMetadata.autoload)) {
-          versionData.autoload = fullMetadata.autoload;
+          versionDataBase.autoload = fullMetadata.autoload;
         }
         if (fullMetadata['autoload-dev'] && typeof fullMetadata['autoload-dev'] === 'object' && !Array.isArray(fullMetadata['autoload-dev'])) {
-          versionData['autoload-dev'] = fullMetadata['autoload-dev'];
+          versionDataBase['autoload-dev'] = fullMetadata['autoload-dev'];
         }
 
         // Conflict/replace/provide (important for dependency resolution)
         if (fullMetadata.conflict && typeof fullMetadata.conflict === 'object' && !Array.isArray(fullMetadata.conflict)) {
-          versionData.conflict = fullMetadata.conflict;
+          versionDataBase.conflict = fullMetadata.conflict;
         }
         if (fullMetadata.replace && typeof fullMetadata.replace === 'object' && !Array.isArray(fullMetadata.replace)) {
-          versionData.replace = fullMetadata.replace;
+          versionDataBase.replace = fullMetadata.replace;
         }
         if (fullMetadata.provide && typeof fullMetadata.provide === 'object' && !Array.isArray(fullMetadata.provide)) {
-          versionData.provide = fullMetadata.provide;
+          versionDataBase.provide = fullMetadata.provide;
         }
 
         // Optional but commonly used fields
         if (fullMetadata.suggest && typeof fullMetadata.suggest === 'object' && !Array.isArray(fullMetadata.suggest)) {
-          versionData.suggest = fullMetadata.suggest;
+          versionDataBase.suggest = fullMetadata.suggest;
         }
         if (fullMetadata.extra && typeof fullMetadata.extra === 'object' && !Array.isArray(fullMetadata.extra)) {
-          versionData.extra = fullMetadata.extra;
+          versionDataBase.extra = fullMetadata.extra;
         }
         if (fullMetadata.bin) {
-          versionData.bin = fullMetadata.bin;
+          versionDataBase.bin = fullMetadata.bin;
         }
         if (fullMetadata.keywords && Array.isArray(fullMetadata.keywords)) {
-          versionData.keywords = fullMetadata.keywords;
+          versionDataBase.keywords = fullMetadata.keywords;
         }
         if (fullMetadata.authors && Array.isArray(fullMetadata.authors)) {
-          versionData.authors = fullMetadata.authors;
+          versionDataBase.authors = fullMetadata.authors;
         }
         if (fullMetadata['notification-url'] !== undefined) {
-          versionData['notification-url'] = fullMetadata['notification-url'];
+          versionDataBase['notification-url'] = fullMetadata['notification-url'];
         }
-      } catch (error) {
-        // If metadata parse fails, we still have all essential fields from database columns
-        const logger = getLogger();
-        logger.warn('Failed to parse stored metadata', {
-          packageName: pkg.name,
-          version: pkg.version,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
+    } else if (pkg.metadata) {
+      const logger = getLogger();
+      logger.warn('Failed to parse stored metadata', {
+        packageName: pkg.name,
+        version: pkg.version,
+      });
     }
 
     // Update dist with any metadata overrides
-    versionData.dist = dist;
+    versionDataBase.dist = dist;
 
-    versions.push(versionData);
+    versions.push(versionDataBase);
+
+    if (normalizedVersion && normalizedVersion !== displayVersion) {
+      versions.push({
+        ...versionDataBase,
+        version: normalizedVersion,
+        version_normalized: normalizedVersion,
+      });
+    }
   }
 
   return {
@@ -599,6 +618,27 @@ export function buildP2Response(
       [packageName]: versions,
     },
   };
+}
+
+function deriveVersionNormalized(version: string): string | undefined {
+  const v = version.startsWith('v') ? version.slice(1) : version;
+
+  const patchMatch = v.match(/^(\d+\.\d+\.\d+)-p(\d+)$/);
+  if (patchMatch) {
+    const [, base, patch] = patchMatch;
+    return `${base}.0-patch${patch}`;
+  }
+
+  const numericMatch = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?$/);
+  if (numericMatch) {
+    const major = numericMatch[1];
+    const minor = numericMatch[2] ?? '0';
+    const patch = numericMatch[3] ?? '0';
+    const build = numericMatch[4] ?? '0';
+    return `${major}.${minor}.${patch}.${build}`;
+  }
+
+  return undefined;
 }
 
 /**
