@@ -389,6 +389,11 @@ export function generateWranglerToml(
   lines.push('# To update it manually, use: wrangler secret put ENCRYPTION_KEY');
   lines.push('# Or set it via Cloudflare dashboard: Workers & Pages → Settings → Variables and Secrets');
   lines.push('');
+  lines.push('# Maximum package versions to return per package (reduces CPU time for packages with 100+ versions)');
+  lines.push('# Set to 0 for unlimited (may cause CPU timeout on Free tier)');
+  lines.push('# Default: 50 (recommended for Free tier), increase to 100-200 for Paid tier');
+  lines.push('MAX_PACKAGE_VERSIONS = "50"');
+  lines.push('');
   
   // Observability section
   lines.push('# Workers Logs (free tier: 200k events/day, 3-day retention)');

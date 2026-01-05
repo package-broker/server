@@ -26,6 +26,7 @@ export interface ComposerRouteEnv {
     QUEUE?: Queue; // Optional - only available on Workers Paid plan
     PACKAGE_STORAGE_WORKFLOW?: Workflow; // Optional - Cloudflare Workflow for background storage
     ENCRYPTION_KEY: string;
+    MAX_PACKAGE_VERSIONS?: string; // Optional - limit versions per package to reduce CPU time (default: 50, 0 = unlimited)
   };
   Variables: {
     storage: StorageDriver;
@@ -33,6 +34,9 @@ export interface ComposerRouteEnv {
     requestId?: string;
   };
 }
+
+/** Default maximum versions per package to avoid CPU timeout on Cloudflare Workers */
+const DEFAULT_MAX_VERSIONS = 50;
 
 /**
  * GET /packages.json
@@ -218,7 +222,8 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
 
   if (existingPackages.length > 0) {
     // Build response from database packages
-    const packageData = buildP2Response(packageName, existingPackages);
+    const maxVersions = getMaxVersions(c.env);
+    const packageData = buildP2Response(packageName, existingPackages, maxVersions);
 
     // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
     const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
@@ -278,7 +283,8 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
           // Transform dist URLs in memory (lightweight, no D1 operations)
           const url = new URL(c.req.url);
           const baseUrl = `${url.protocol}//${url.host}`;
-          const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl);
+          const maxVersions = getMaxVersions(c.env);
+          const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl, maxVersions);
 
           // Check if we should skip storage (for Free tier optimization)
           const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
@@ -459,14 +465,35 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
  * 
  * NOTE: Composer 2 (p2) format expects versions as an ARRAY, not a dict keyed by version.
  * See: https://packagist.org/apidoc
+ * 
+ * @param packageName - Package name in vendor/package format
+ * @param packageVersions - Array of package records from database
+ * @param maxVersions - Maximum versions to return (0 = unlimited, default: 50)
  */
 export function buildP2Response(
   packageName: string,
-  packageVersions: Array<typeof packages.$inferSelect>
+  packageVersions: Array<typeof packages.$inferSelect>,
+  maxVersions: number = DEFAULT_MAX_VERSIONS
 ): ComposerP2Response {
+  // Apply version limiting to DB records as well
+  // Convert to normalized format for limiting
+  const normalizedForLimiting = packageVersions.map(pkg => ({
+    version: pkg.version,
+    metadata: {
+      time: pkg.released_at ? new Date(pkg.released_at * 1000).toISOString() : undefined,
+      ...pkg, // Include all fields for reference
+    },
+  }));
+  
+  const limitedVersions = limitVersions(normalizedForLimiting, maxVersions);
+  const limitedVersionSet = new Set(limitedVersions.map(v => v.version));
+  
+  // Filter packageVersions to only include limited versions
+  const filteredPackageVersions = packageVersions.filter(pkg => limitedVersionSet.has(pkg.version));
+  
   const versions: any[] = [];
 
-  for (const pkg of packageVersions) {
+  for (const pkg of filteredPackageVersions) {
     // Build dist object from database columns (no metadata parse needed)
     // Use dist_url (proxy URL) and transform to mirror format
     // source_dist_url is the original external URL - don't expose it to clients
@@ -739,7 +766,8 @@ async function proxyToPackagist(
 
     // Transform dist URLs in memory (lightweight, no D1 operations)
     // This allows us to return the response immediately before hitting CPU limits
-    const transformedData = transformDistUrlsInMemory(packageData, 'packagist', baseUrl);
+    const maxVersions = getMaxVersions(c.env);
+    const transformedData = transformDistUrlsInMemory(packageData, 'packagist', baseUrl, maxVersions);
 
     // Check if we should skip storage (for Free tier optimization)
     const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
@@ -939,11 +967,17 @@ function transformDistUrlToMirrorFormat(url: string | null): string | null {
  * 
  * NOTE: Composer 2 (p2) format expects versions as an ARRAY, not a dict keyed by version.
  * See: https://packagist.org/apidoc
+ * 
+ * @param packageData - Raw package data from upstream
+ * @param repoId - Repository identifier
+ * @param proxyBaseUrl - Base URL for proxy dist URLs
+ * @param maxVersions - Maximum versions per package (0 = unlimited, default: 50)
  */
 function transformDistUrlsInMemory(
   packageData: any,
   repoId: string,
-  proxyBaseUrl: string
+  proxyBaseUrl: string,
+  maxVersions: number = DEFAULT_MAX_VERSIONS
 ): any {
   if (!packageData.packages) {
     return packageData;
@@ -957,8 +991,10 @@ function transformDistUrlsInMemory(
     // Sanitize metadata to remove __unset values that break Composer
     const sanitizedVersions = sanitizeMetadata(versions);
     const normalizedVersions = normalizePackageVersions(sanitizedVersions);
+    // Apply version limiting to reduce CPU processing time
+    const limitedVersions = limitVersions(normalizedVersions, maxVersions);
 
-    for (const { version, metadata } of normalizedVersions) {
+    for (const { version, metadata } of limitedVersions) {
       // Use existing reference or generate simple one (no expensive crypto)
       const distReference = metadata.dist?.reference || `${pkgName.replace('/', '-')}-${version}`.substring(0, 40);
 
@@ -1009,6 +1045,91 @@ function normalizePackageVersions(versions: any): Array<{ version: string; metad
     }));
   }
   return [];
+}
+
+/**
+ * Limit package versions to reduce CPU processing time
+ * 
+ * Strategy:
+ * 1. Always keep dev-* versions (critical for minimum-stability: dev)
+ * 2. Sort stable versions by release time (most recent first)
+ * 3. Keep only the N most recent stable versions
+ * 
+ * This prevents CPU timeout on packages with 100+ versions (e.g., symfony/http-kernel has 800+)
+ * 
+ * @param versions - Normalized array of { version, metadata }
+ * @param maxVersions - Maximum versions to keep (0 = unlimited)
+ * @returns Limited array of versions
+ */
+function limitVersions(
+  versions: Array<{ version: string; metadata: any }>,
+  maxVersions: number
+): Array<{ version: string; metadata: any }> {
+  // 0 or negative means unlimited
+  if (maxVersions <= 0 || versions.length <= maxVersions) {
+    return versions;
+  }
+
+  // Separate dev versions from stable versions
+  const devVersions: typeof versions = [];
+  const stableVersions: typeof versions = [];
+
+  for (const v of versions) {
+    if (v.version.startsWith('dev-') || v.version.includes('-dev')) {
+      devVersions.push(v);
+    } else {
+      stableVersions.push(v);
+    }
+  }
+
+  // Sort stable versions by release time (most recent first)
+  // Fall back to version string comparison if time is not available
+  stableVersions.sort((a, b) => {
+    const timeA = a.metadata.time ? new Date(a.metadata.time).getTime() : 0;
+    const timeB = b.metadata.time ? new Date(b.metadata.time).getTime() : 0;
+    if (timeA !== timeB) {
+      return timeB - timeA; // Most recent first
+    }
+    // Fallback: compare version strings (simple string comparison, not semver)
+    return b.version.localeCompare(a.version);
+  });
+
+  // Calculate how many stable versions we can keep
+  // Reserve space for dev versions, but don't let them take more than 20% of the limit
+  const maxDevVersions = Math.min(devVersions.length, Math.ceil(maxVersions * 0.2));
+  const maxStableVersions = maxVersions - maxDevVersions;
+
+  // Take the most recent stable versions
+  const limitedStable = stableVersions.slice(0, maxStableVersions);
+  // Take dev versions (already limited by maxDevVersions)
+  const limitedDev = devVersions.slice(0, maxDevVersions);
+
+  const logger = getLogger();
+  if (stableVersions.length > maxStableVersions || devVersions.length > maxDevVersions) {
+    logger.debug('Version limiting applied', {
+      originalCount: versions.length,
+      stableCount: stableVersions.length,
+      devCount: devVersions.length,
+      limitedStableCount: limitedStable.length,
+      limitedDevCount: limitedDev.length,
+      maxVersions,
+    });
+  }
+
+  // Combine: dev versions first, then stable versions (matches Packagist ordering)
+  return [...limitedDev, ...limitedStable];
+}
+
+/**
+ * Get the maximum package versions limit from environment
+ */
+function getMaxVersions(env: ComposerRouteEnv['Bindings']): number {
+  const envValue = env.MAX_PACKAGE_VERSIONS;
+  if (envValue === undefined || envValue === '') {
+    return DEFAULT_MAX_VERSIONS;
+  }
+  const parsed = parseInt(envValue, 10);
+  return isNaN(parsed) ? DEFAULT_MAX_VERSIONS : parsed;
 }
 
 /**
