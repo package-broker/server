@@ -490,41 +490,41 @@ export function buildP2Response(
       }
     }
 
-    const displayVersion: string = (fullMetadata?.version && typeof fullMetadata.version === 'string')
-      ? fullMetadata.version
-      : pkg.version;
+    const displayVersion: string =
+      typeof fullMetadata?.version === 'string' ? fullMetadata.version : pkg.version;
 
-    const normalizedVersion: string | undefined = (fullMetadata?.version_normalized && typeof fullMetadata.version_normalized === 'string')
-      ? fullMetadata.version_normalized
-      : deriveVersionNormalized(displayVersion);
+    const normalizedVersion: string | undefined =
+      typeof fullMetadata?.version_normalized === 'string'
+        ? fullMetadata.version_normalized
+        : deriveVersionNormalized(displayVersion);
 
-    const versionData: any = {
+    const versionDataBase: any = {
       name: packageName,
       version: displayVersion,
       ...(normalizedVersion ? { version_normalized: normalizedVersion } : {}),
       dist,
     };
     if (pkg.description) {
-      versionData.description = pkg.description;
+      versionDataBase.description = pkg.description;
     }
     if (pkg.license) {
       try {
         const license = JSON.parse(pkg.license);
         if (typeof license === 'string' || Array.isArray(license)) {
-          versionData.license = license;
+          versionDataBase.license = license;
         }
       } catch {
-        versionData.license = pkg.license;
+        versionDataBase.license = pkg.license;
       }
     }
     if (pkg.package_type) {
-      versionData.type = pkg.package_type;
+      versionDataBase.type = pkg.package_type;
     }
     if (pkg.homepage) {
-      versionData.homepage = pkg.homepage;
+      versionDataBase.homepage = pkg.homepage;
     }
     if (pkg.released_at) {
-      versionData.time = new Date(pkg.released_at * 1000).toISOString();
+      versionDataBase.time = new Date(pkg.released_at * 1000).toISOString();
     }
 
     if (fullMetadata) {
@@ -535,7 +535,7 @@ export function buildP2Response(
           !Array.isArray(fullMetadata.source) &&
           typeof fullMetadata.source.type === 'string' &&
           typeof fullMetadata.source.url === 'string') {
-          versionData.source = {
+          versionDataBase.source = {
             type: fullMetadata.source.type,
             url: fullMetadata.source.url,
             ...(fullMetadata.source.reference && { reference: fullMetadata.source.reference }),
@@ -549,47 +549,47 @@ export function buildP2Response(
           dist.shasum = fullMetadata.dist.shasum;
         }
         if (fullMetadata.require && typeof fullMetadata.require === 'object' && !Array.isArray(fullMetadata.require)) {
-          versionData.require = fullMetadata.require;
+          versionDataBase.require = fullMetadata.require;
         }
         if (fullMetadata['require-dev'] && typeof fullMetadata['require-dev'] === 'object' && !Array.isArray(fullMetadata['require-dev'])) {
-          versionData['require-dev'] = fullMetadata['require-dev'];
+          versionDataBase['require-dev'] = fullMetadata['require-dev'];
         }
         if (fullMetadata.autoload && typeof fullMetadata.autoload === 'object' && !Array.isArray(fullMetadata.autoload)) {
-          versionData.autoload = fullMetadata.autoload;
+          versionDataBase.autoload = fullMetadata.autoload;
         }
         if (fullMetadata['autoload-dev'] && typeof fullMetadata['autoload-dev'] === 'object' && !Array.isArray(fullMetadata['autoload-dev'])) {
-          versionData['autoload-dev'] = fullMetadata['autoload-dev'];
+          versionDataBase['autoload-dev'] = fullMetadata['autoload-dev'];
         }
 
         // Conflict/replace/provide (important for dependency resolution)
         if (fullMetadata.conflict && typeof fullMetadata.conflict === 'object' && !Array.isArray(fullMetadata.conflict)) {
-          versionData.conflict = fullMetadata.conflict;
+          versionDataBase.conflict = fullMetadata.conflict;
         }
         if (fullMetadata.replace && typeof fullMetadata.replace === 'object' && !Array.isArray(fullMetadata.replace)) {
-          versionData.replace = fullMetadata.replace;
+          versionDataBase.replace = fullMetadata.replace;
         }
         if (fullMetadata.provide && typeof fullMetadata.provide === 'object' && !Array.isArray(fullMetadata.provide)) {
-          versionData.provide = fullMetadata.provide;
+          versionDataBase.provide = fullMetadata.provide;
         }
 
         // Optional but commonly used fields
         if (fullMetadata.suggest && typeof fullMetadata.suggest === 'object' && !Array.isArray(fullMetadata.suggest)) {
-          versionData.suggest = fullMetadata.suggest;
+          versionDataBase.suggest = fullMetadata.suggest;
         }
         if (fullMetadata.extra && typeof fullMetadata.extra === 'object' && !Array.isArray(fullMetadata.extra)) {
-          versionData.extra = fullMetadata.extra;
+          versionDataBase.extra = fullMetadata.extra;
         }
         if (fullMetadata.bin) {
-          versionData.bin = fullMetadata.bin;
+          versionDataBase.bin = fullMetadata.bin;
         }
         if (fullMetadata.keywords && Array.isArray(fullMetadata.keywords)) {
-          versionData.keywords = fullMetadata.keywords;
+          versionDataBase.keywords = fullMetadata.keywords;
         }
         if (fullMetadata.authors && Array.isArray(fullMetadata.authors)) {
-          versionData.authors = fullMetadata.authors;
+          versionDataBase.authors = fullMetadata.authors;
         }
         if (fullMetadata['notification-url'] !== undefined) {
-          versionData['notification-url'] = fullMetadata['notification-url'];
+          versionDataBase['notification-url'] = fullMetadata['notification-url'];
         }
     } else if (pkg.metadata) {
       const logger = getLogger();
@@ -600,9 +600,17 @@ export function buildP2Response(
     }
 
     // Update dist with any metadata overrides
-    versionData.dist = dist;
+    versionDataBase.dist = dist;
 
-    versions.push(versionData);
+    versions.push(versionDataBase);
+
+    if (normalizedVersion && normalizedVersion !== displayVersion) {
+      versions.push({
+        ...versionDataBase,
+        version: normalizedVersion,
+        version_normalized: normalizedVersion,
+      });
+    }
   }
 
   return {

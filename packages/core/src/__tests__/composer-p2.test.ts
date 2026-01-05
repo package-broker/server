@@ -299,10 +299,13 @@ describe('Composer p2 Response Generation', () => {
 
       const result = buildP2Response(packageName, mockPackages);
       const version = result.packages[packageName].find(v => v.version === '103.0.7-p8');
+      const alias = result.packages[packageName].find(v => v.version === '103.0.7.0-patch8');
 
       expect(version).toBeDefined();
       expect(version!.version).toBe('103.0.7-p8');
       expect((version as any)!.version_normalized).toBe('103.0.7.0-patch8');
+      expect(alias).toBeDefined();
+      expect((alias as any)!.version_normalized).toBe('103.0.7.0-patch8');
       // Original version should still be in metadata
       const metadata = JSON.parse(mockPackages[0].metadata!);
       expect(metadata.version).toBe('103.0.7-p8');
@@ -328,10 +331,13 @@ describe('Composer p2 Response Generation', () => {
 
       const result = buildP2Response(packageName, mockPackages);
       const version = result.packages[packageName].find(v => v.version === 'v7.17.3');
+      const alias = result.packages[packageName].find(v => v.version === '7.17.3.0');
 
       expect(version).toBeDefined();
       expect(version!.version).toBe('v7.17.3');
       expect((version as any)!.version_normalized).toBe('7.17.3.0');
+      expect(alias).toBeDefined();
+      expect((alias as any)!.version_normalized).toBe('7.17.3.0');
       // Original version should still be in metadata
       const metadata = JSON.parse(mockPackages[0].metadata!);
       expect(metadata.version).toBe('v7.17.3');
