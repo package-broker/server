@@ -256,6 +256,7 @@ export async function authMiddleware(
   }>,
   next: () => Promise<Response>
 ): Promise<Response> {
+  const path = new URL(c.req.url).pathname;
   const authHeader = c.req.header('Authorization');
   const credentials = extractBasicAuth(authHeader);
 
@@ -325,17 +326,18 @@ export async function authMiddleware(
     return c.json({ error: 'Unauthorized', message: 'Token expired' }, 401);
   }
 
-  // Check rate limit (skip if null/0 to avoid KV operations)
-  const rateLimitMax = tokenRecord.rate_limit_max;
-  const rateLimit = await checkRateLimit(c.env.KV, tokenRecord.id, rateLimitMax);
-  if (!rateLimit.allowed) {
-    return c.json(
-      {
-        error: 'Too Many Requests',
-        message: 'Rate limit exceeded',
-      },
-      429
-    );
+  if (!isComposerEndpoint(path)) {
+    const rateLimitMax = tokenRecord.rate_limit_max;
+    const rateLimit = await checkRateLimit(c.env.KV, tokenRecord.id, rateLimitMax);
+    if (!rateLimit.allowed) {
+      return c.json(
+        {
+          error: 'Too Many Requests',
+          message: 'Rate limit exceeded',
+        },
+        429
+      );
+    }
   }
 
   // Attach token info to context
@@ -377,6 +379,14 @@ export async function authMiddleware(
   c.executionCtx.waitUntil(updateTokenLastUsed());
 
   return await next();
+}
+
+function isComposerEndpoint(path: string): boolean {
+  return (
+    path === '/packages.json' ||
+    path.startsWith('/p2/') ||
+    path.startsWith('/dist/')
+  );
 }
 
 /**
