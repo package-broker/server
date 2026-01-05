@@ -152,14 +152,29 @@ function TokenRow({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [description, setDescription] = useState(token.description);
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(
+    kvAvailable && !!token.rate_limit_max && token.rate_limit_max > 0
+  );
+  const [rateLimit, setRateLimit] = useState<string>(
+    token.rate_limit_max && token.rate_limit_max > 0 ? String(token.rate_limit_max) : ''
+  );
 
   const handleSave = () => {
-    onUpdate({ description });
+    const rateLimitNum =
+      kvAvailable && rateLimitEnabled && rateLimit !== '' ? parseInt(rateLimit, 10) : null;
+    onUpdate({
+      description,
+      ...(kvAvailable
+        ? { rate_limit_max: rateLimitNum === null || isNaN(rateLimitNum) ? null : rateLimitNum }
+        : {}),
+    });
     setIsEditing(false);
   };
 
   const handleCancel = () => {
     setDescription(token.description);
+    setRateLimitEnabled(kvAvailable && !!token.rate_limit_max && token.rate_limit_max > 0);
+    setRateLimit(token.rate_limit_max && token.rate_limit_max > 0 ? String(token.rate_limit_max) : '');
     setIsEditing(false);
   };
 
@@ -197,9 +212,41 @@ function TokenRow({
       </td>
       {kvAvailable && (
         <td className="px-6 py-4 text-sm text-slate-400">
-          {token.rate_limit_max === null || token.rate_limit_max === 0
-            ? 'Unlimited'
-            : `${token.rate_limit_max.toLocaleString()}/hour`}
+          {isEditing ? (
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={rateLimitEnabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setRateLimitEnabled(enabled);
+                    if (enabled && rateLimit === '') {
+                      setRateLimit('1000');
+                    }
+                    if (!enabled) {
+                      setRateLimit('');
+                    }
+                  }}
+                />
+                Enabled
+              </label>
+              <input
+                type="number"
+                value={rateLimit}
+                onChange={(e) => setRateLimit(e.target.value)}
+                min={0}
+                max={25000}
+                className="input w-40 text-sm"
+                disabled={!rateLimitEnabled}
+                placeholder="Unlimited"
+              />
+            </div>
+          ) : (
+            token.rate_limit_max === null || token.rate_limit_max === 0
+              ? 'Unlimited'
+              : `${token.rate_limit_max.toLocaleString()}/hour`
+          )}
         </td>
       )}
       <td className="px-6 py-4 text-sm text-slate-400">
@@ -270,7 +317,8 @@ function GenerateTokenModal({
 }) {
   const [description, setDescription] = useState('');
   const [permissions, setPermissions] = useState<'readonly' | 'write'>('readonly');
-  const [rateLimit, setRateLimit] = useState<string>('1000');
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(false);
+  const [rateLimit, setRateLimit] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
   const queryClient = useQueryClient();
@@ -285,7 +333,7 @@ function GenerateTokenModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const rateLimitNum = kvAvailable && rateLimit !== '' ? parseInt(rateLimit) : null;
+    const rateLimitNum = kvAvailable && rateLimitEnabled && rateLimit !== '' ? parseInt(rateLimit, 10) : null;
     createMutation.mutate({
       description,
       permissions,
@@ -446,6 +494,23 @@ function GenerateTokenModal({
             <div>
               <label className="label">Rate Limit (requests/hour)</label>
               <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={rateLimitEnabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setRateLimitEnabled(enabled);
+                      if (enabled && rateLimit === '') {
+                        setRateLimit('1000');
+                      }
+                      if (!enabled) {
+                        setRateLimit('');
+                      }
+                    }}
+                  />
+                  Enable rate limiting
+                </label>
                 <input
                   type="number"
                   value={rateLimit}
@@ -454,9 +519,10 @@ function GenerateTokenModal({
                   min={0}
                   max={25000}
                   className="input w-full"
+                  disabled={!rateLimitEnabled}
                 />
                 <p className="text-xs text-slate-400">
-                  Leave empty or set to 0 for unlimited (no rate limiting)
+                  When disabled, no rate limit is enforced (no KV operations).
                 </p>
               </div>
             </div>

@@ -32,7 +32,7 @@ export const tokens = sqliteTable(
     description: text('description').notNull(),
     token_hash: text('token_hash').notNull(), // SHA-256 hash for high-entropy tokens
     permissions: text('permissions').notNull().default('readonly'), // 'readonly' | 'write'
-    rate_limit_max: integer('rate_limit_max').default(1000), // requests per hour
+    rate_limit_max: integer('rate_limit_max'), // requests per hour (null/0 = unlimited)
     created_at: integer('created_at').notNull(),
     expires_at: integer('expires_at'),
     last_used_at: integer('last_used_at'),

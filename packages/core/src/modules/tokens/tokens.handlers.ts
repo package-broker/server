@@ -75,9 +75,8 @@ export async function createToken(c: OpenAPIContext<TokensRouteEnv, ReturnType<t
   const token = generateToken();
   const tokenHash = hashToken(token);
 
-  const rateLimitMax = validated.rate_limit_max !== null && validated.rate_limit_max !== undefined
-    ? validated.rate_limit_max
-    : 1000;
+  const rateLimitMax =
+    validated.rate_limit_max && validated.rate_limit_max > 0 ? validated.rate_limit_max : null;
 
   await db.insert(tokens).values({
     id: tokenId,
@@ -164,7 +163,8 @@ export async function updateToken(c: OpenAPIContext<TokensRouteEnv, ReturnType<t
     updateData.description = validated.description;
   }
   if (validated.rate_limit_max !== undefined) {
-    updateData.rate_limit_max = validated.rate_limit_max;
+    updateData.rate_limit_max =
+      validated.rate_limit_max && validated.rate_limit_max > 0 ? validated.rate_limit_max : null;
   }
 
   if (Object.keys(updateData).length > 0) {
