@@ -86,6 +86,79 @@ npx package-broker-cloudflare deploy --ci --json \
 - Cloudflare account
 - Authenticated with `wrangler login` (interactive mode) or `CLOUDFLARE_API_TOKEN` environment variable (CI mode)
 
+## Troubleshooting
+
+### Invalid Routes Error
+
+If you see an error like:
+```
+[ERROR] Invalid Routes:
+  example.com/*:
+```
+
+This occurs when using custom domains. The `custom_domain = true` route type requires the pattern **without** the `/*` suffix. If you're using an older version, update to the latest:
+
+```bash
+npm update @package-broker/cloudflare
+```
+
+### Login Screen Instead of Setup Wizard
+
+On a fresh installation, you should see the Setup wizard (to create the first admin user). If you see the Login screen instead:
+
+1. Check the API response:
+   ```bash
+   curl -s https://your-domain.com/api/auth/check | jq .
+   ```
+   
+2. Expected response for fresh install:
+   ```json
+   {"authRequired": false, "setupRequired": true}
+   ```
+
+3. If you see `{"auth_required": false}` (snake_case, missing `setupRequired`), you're running an old version. Update packages and redeploy.
+
+### Resources Created But Not Bound
+
+If D1/KV/R2 resources are created but the Worker can't access them:
+
+1. Check the `wrangler.toml` has correct IDs:
+   ```bash
+   grep -E "database_id|kv_namespaces|r2_buckets" wrangler.toml
+   ```
+
+2. Verify bindings in Cloudflare Dashboard: Workers & Pages → Your Worker → Settings → Bindings
+
+3. Redeploy to apply binding changes:
+   ```bash
+   npx wrangler deploy
+   ```
+
+### Local Development Testing
+
+For debugging deployment issues, test locally before pushing to CI:
+
+```bash
+# Set credentials
+export CLOUDFLARE_API_TOKEN="your-token"
+export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+export ENCRYPTION_KEY="test-encryption-key-32-chars-min"
+
+# Build from source
+cd /path/to/package-broker/server
+npm run build
+
+# Deploy with local code
+node packages/cloudflare/dist/index.js deploy --ci \
+  --worker-name test-worker \
+  --tier free
+
+# Or use wrangler directly with existing wrangler.toml
+npx wrangler deploy
+```
+
+This gives immediate feedback without CI delays or NPM publishing.
+
 ## See Also
 
 - [Quickstart Guide](../../../docs/docs/getting-started/quickstart-cloudflare.md)
