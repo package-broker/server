@@ -390,9 +390,11 @@ export function generateWranglerToml(
   lines.push('# Or set it via Cloudflare dashboard: Workers & Pages → Settings → Variables and Secrets');
   lines.push('');
   lines.push('# Maximum package versions to return per package (reduces CPU time for packages with 100+ versions)');
-  lines.push('# Set to 0 for unlimited (may cause CPU timeout on Free tier)');
-  lines.push('# Default: 50 (recommended for Free tier), increase to 100-200 for Paid tier');
-  lines.push('MAX_PACKAGE_VERSIONS = "50"');
+  lines.push('# Auto-detected based on tier:');
+  lines.push('#   - Free tier (no QUEUE): defaults to 50 versions');
+  lines.push('#   - Paid tier (with QUEUE): defaults to unlimited (0)');
+  lines.push('# Uncomment to override the auto-detected default:');
+  lines.push('# MAX_PACKAGE_VERSIONS = "50"');
   lines.push('');
   
   // Observability section

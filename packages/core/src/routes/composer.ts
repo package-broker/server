@@ -1122,14 +1122,30 @@ function limitVersions(
 
 /**
  * Get the maximum package versions limit from environment
+ * 
+ * Behavior:
+ * - On Free tier (no QUEUE binding): defaults to 50 versions to prevent CPU timeout
+ * - On Paid tier (QUEUE binding exists): defaults to unlimited (0)
+ * - MAX_PACKAGE_VERSIONS env var overrides the default for either tier
  */
 function getMaxVersions(env: ComposerRouteEnv['Bindings']): number {
   const envValue = env.MAX_PACKAGE_VERSIONS;
-  if (envValue === undefined || envValue === '') {
-    return DEFAULT_MAX_VERSIONS;
+  
+  // If explicitly set, use that value
+  if (envValue !== undefined && envValue !== '') {
+    const parsed = parseInt(envValue, 10);
+    return isNaN(parsed) ? DEFAULT_MAX_VERSIONS : parsed;
   }
-  const parsed = parseInt(envValue, 10);
-  return isNaN(parsed) ? DEFAULT_MAX_VERSIONS : parsed;
+  
+  // Auto-detect tier: QUEUE binding only exists on Paid tier
+  // Paid tier has higher CPU limits (50ms vs 10ms), so no limiting needed
+  const isPaidTier = env.QUEUE !== undefined;
+  
+  if (isPaidTier) {
+    return 0; // Unlimited on paid tier
+  }
+  
+  return DEFAULT_MAX_VERSIONS; // Apply limit on free tier
 }
 
 /**
