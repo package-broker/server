@@ -156,8 +156,11 @@ export const checkAuthRequiredHandler = async (c: any): Promise<Response> => {
 
     const count = await userService.count();
 
+    // setupRequired = true when no users exist (fresh install)
+    // authRequired = true when users exist (need to login)
     return c.json({
-        auth_required: count > 0,
+        authRequired: count > 0,
+        setupRequired: count === 0,
     });
 };
 

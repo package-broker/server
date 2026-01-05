@@ -128,17 +128,22 @@ export const checkAuthRequiredRouteDef = createRoute({
     method: 'get',
     path: '/check',
     summary: 'Check if authentication is required',
-    description: 'Check if the instance requires authentication',
+    description: 'Check if the instance requires authentication or initial setup',
     responses: {
         200: {
             content: {
                 'application/json': {
                     schema: z.object({
-                        auth_required: z.boolean(),
+                        authRequired: z.boolean().openapi({
+                            description: 'True if users exist (login required)',
+                        }),
+                        setupRequired: z.boolean().openapi({
+                            description: 'True if no users exist (initial setup needed)',
+                        }),
                     }),
                 },
             },
-            description: 'Authentication requirement status',
+            description: 'Authentication and setup requirement status',
         },
     },
     tags: ['Authentication'],
