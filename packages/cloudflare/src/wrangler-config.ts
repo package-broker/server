@@ -390,6 +390,14 @@ export function generateWranglerToml(
   lines.push('# Or set it via Cloudflare dashboard: Workers & Pages → Settings → Variables and Secrets');
   lines.push('');
   
+  // Observability section
+  lines.push('# Workers Logs (free tier: 200k events/day, 3-day retention)');
+  lines.push('# View logs in Cloudflare Dashboard: Workers & Pages > Your Worker > Logs');
+  lines.push('[observability]');
+  lines.push('enabled = true');
+  lines.push('head_sampling_rate = 1');
+  lines.push('');
+  
   // Resource bindings
   lines.push(generateResourceBindings(workerName, resources, options.paidTier));
   

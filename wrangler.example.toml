@@ -13,6 +13,12 @@ ENCRYPTION_KEY = "REPLACE_WITH_YOUR_32_BYTE_KEY_BASE64"
 # Optional: Set to restrict admin API access
 # ADMIN_TOKEN = "your-admin-token"
 
+# Workers Logs (free tier: 200k events/day, 3-day retention)
+# View logs in Cloudflare Dashboard: Workers & Pages > Your Worker > Logs
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # D1 Database
 [[d1_databases]]
 binding = "DB"
