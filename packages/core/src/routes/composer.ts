@@ -1034,13 +1034,13 @@ function normalizePackageVersions(versions: any): Array<{ version: string; metad
   if (Array.isArray(versions)) {
     // Packagist p2 format: [{version: "3.9.0", ...}, {version: "3.8.1", ...}]
     return versions.map((metadata) => ({
-      version: metadata.version || String(metadata),
+      version: metadata.version_normalized || metadata.version || String(metadata),
       metadata,
     }));
   } else if (typeof versions === 'object' && versions !== null) {
     // Traditional Composer repo format: {"3.9.0": {...}, "3.8.1": {...}}
     return Object.entries(versions).map(([key, val]) => ({
-      version: (val as any)?.version || key,
+      version: (val as any)?.version_normalized || (val as any)?.version || key,
       metadata: val,
     }));
   }

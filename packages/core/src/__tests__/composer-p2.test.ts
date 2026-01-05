@@ -277,5 +277,61 @@ describe('Composer p2 Response Generation', () => {
       expect(version!.dist.type).toBe('zip');
       expect(version!.time).toBe('2019-06-18T21:01:42.000Z');
     });
+
+    it('should use version_normalized when stored in database', () => {
+      const packageName = 'magento/framework';
+      // Simulate a package stored with normalized version (as it would be after our fix)
+      const mockPackages = [
+        createMockPackage(packageName, '103.0.7.0-patch8', {
+          version: '103.0.7-p8',
+          version_normalized: '103.0.7.0-patch8',
+          dist: {
+            type: 'zip',
+            url: 'https://example.com/framework.zip',
+            reference: 'abc123',
+          },
+        }, {
+          // Override version to be the normalized version (what gets stored)
+          version: '103.0.7.0-patch8',
+        }),
+      ];
+
+      const result = buildP2Response(packageName, mockPackages);
+      const version = result.packages[packageName].find(v => v.version === '103.0.7.0-patch8');
+
+      expect(version).toBeDefined();
+      expect(version!.version).toBe('103.0.7.0-patch8');
+      // Original version should still be in metadata
+      const metadata = JSON.parse(mockPackages[0].metadata);
+      expect(metadata.version).toBe('103.0.7-p8');
+    });
+
+    it('should use version_normalized for elasticsearch package format', () => {
+      const packageName = 'elasticsearch/elasticsearch';
+      // Simulate a package stored with normalized version
+      const mockPackages = [
+        createMockPackage(packageName, '7.17.3.0', {
+          version: 'v7.17.3',
+          version_normalized: '7.17.3.0',
+          dist: {
+            type: 'zip',
+            url: 'https://example.com/elasticsearch.zip',
+            reference: 'def456',
+          },
+        }, {
+          // Override version to be the normalized version
+          version: '7.17.3.0',
+        }),
+      ];
+
+      const result = buildP2Response(packageName, mockPackages);
+      const version = result.packages[packageName].find(v => v.version === '7.17.3.0');
+
+      expect(version).toBeDefined();
+      expect(version!.version).toBe('7.17.3.0');
+      // Original version should still be in metadata
+      const metadata = JSON.parse(mockPackages[0].metadata);
+      expect(metadata.version).toBe('v7.17.3');
+    });
   });
 });

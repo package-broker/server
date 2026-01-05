@@ -201,9 +201,9 @@ async function syncWithProviderIncludes(
       
       // Normalize versions to handle both array and object formats
       const versionsArray = Array.isArray(packageVersions)
-        ? packageVersions.map((metadata) => ({ version: metadata.version || String(metadata), metadata }))
+        ? packageVersions.map((metadata) => ({ version: metadata.version_normalized || metadata.version || String(metadata), metadata }))
         : Object.entries(packageVersions).map(([key, val]) => ({
-            version: (val as any)?.version || key,
+            version: (val as any)?.version_normalized || (val as any)?.version || key,
             metadata: val,
           }));
       
@@ -315,9 +315,9 @@ function parseComposerPackagesJson(
   for (const [packageName, versions] of Object.entries(data.packages || {})) {
     // Normalize versions to handle both array format (Packagist p2) and object format (traditional repos)
     const versionsArray = Array.isArray(versions)
-      ? versions.map((metadata) => ({ version: metadata.version || String(metadata), metadata }))
+      ? versions.map((metadata) => ({ version: metadata.version_normalized || metadata.version || String(metadata), metadata }))
       : Object.entries(versions).map(([key, val]) => ({
-          version: (val as any)?.version || key,
+          version: (val as any)?.version_normalized || (val as any)?.version || key,
           metadata: val,
         }));
     
