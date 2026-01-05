@@ -19,7 +19,7 @@ import repositoriesModule from './modules/repositories';
 import tokensModule from './modules/tokens';
 import packagesModule from './modules/packages';
 import artifactsModule from './modules/artifacts';
-import adminModule from './modules/admin';
+import { statsModule, settingsModule } from './modules/admin';
 import { mountComposerRoutes } from './modules/composer';
 import { getPackageStatsRouteDef } from './modules/admin/admin.routes';
 import { getPackageStats } from './modules/admin/admin.handlers';
@@ -202,9 +202,9 @@ export function createApp(options?: {
     protectedRoutes.route('/packages', packagesModule);
     protectedRoutes.route('/artifacts', artifactsModule);
     
-    // Admin module (stats and settings)
-    protectedRoutes.route('/stats', adminModule);
-    protectedRoutes.route('/settings', adminModule);
+    // Admin module - split into separate modules to avoid route collisions
+    protectedRoutes.route('/stats', statsModule);
+    protectedRoutes.route('/settings', settingsModule);
     
     // Mount getPackageStats at correct path (temporary - should move to packages module)
     // This route needs to be at /api/packages/:name/:version/stats

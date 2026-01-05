@@ -93,9 +93,9 @@ export async function getPackageStats(c: OpenAPIContext<StatsRouteEnv>): Promise
 }
 
 export async function getSettings(c: OpenAPIContext<SettingsRouteEnv>): Promise<Response> {
-  // Access KV from environment - try both direct access and type assertion
-  const kv = (c.env as any).KV as KVNamespace | undefined;
-  const kvAvailable = isKvAvailable(kv);
+  // Direct access - KV binding is passed through Hono's context
+  const kv = c.env.KV;
+  const kvAvailable = !!kv;
   
   const packagistMirroringEnabled = kvAvailable && kv
     ? await kv.get(PACKAGIST_MIRRORING_KEY)

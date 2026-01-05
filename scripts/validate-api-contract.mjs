@@ -114,6 +114,93 @@ async function testHealthEndpoint() {
   }
 }
 
+async function testAdminEndpointSeparation(adminToken) {
+  if (!adminToken) {
+    console.log('⚠️  Skipping admin endpoint tests (no admin token)');
+    return true;
+  }
+
+  const headers = { 'Authorization': `Bearer ${adminToken}` };
+  let allPassed = true;
+
+  try {
+    // Test /api/stats endpoint
+    console.log('Testing /api/stats endpoint...');
+    const statsResponse = await fetch(`${API_URL}/api/stats`, { headers });
+    
+    if (!statsResponse.ok) {
+      console.error(`❌ /api/stats returned ${statsResponse.status}`);
+      allPassed = false;
+    } else {
+      const statsData = await statsResponse.json();
+      
+      // Stats should have these properties
+      const requiredStatsProps = ['active_repos', 'cached_packages', 'total_downloads'];
+      const missingStatsProps = requiredStatsProps.filter(prop => !(prop in statsData));
+      
+      if (missingStatsProps.length > 0) {
+        console.error(`❌ /api/stats missing required properties: ${missingStatsProps.join(', ')}`);
+        console.error(`   Received: ${JSON.stringify(statsData)}`);
+        allPassed = false;
+      }
+      
+      // Stats should NOT have settings properties
+      const forbiddenStatsProps = ['kv_available', 'packagist_mirroring_enabled', 'package_caching_enabled'];
+      const wrongStatsProps = forbiddenStatsProps.filter(prop => prop in statsData);
+      
+      if (wrongStatsProps.length > 0) {
+        console.error(`❌ /api/stats has settings properties (route collision detected!): ${wrongStatsProps.join(', ')}`);
+        console.error(`   Received: ${JSON.stringify(statsData)}`);
+        allPassed = false;
+      }
+      
+      if (missingStatsProps.length === 0 && wrongStatsProps.length === 0) {
+        console.log('✅ /api/stats returns correct schema');
+      }
+    }
+
+    // Test /api/settings endpoint
+    console.log('Testing /api/settings endpoint...');
+    const settingsResponse = await fetch(`${API_URL}/api/settings`, { headers });
+    
+    if (!settingsResponse.ok) {
+      console.error(`❌ /api/settings returned ${settingsResponse.status}`);
+      allPassed = false;
+    } else {
+      const settingsData = await settingsResponse.json();
+      
+      // Settings should have these properties
+      const requiredSettingsProps = ['kv_available', 'packagist_mirroring_enabled', 'package_caching_enabled'];
+      const missingSettingsProps = requiredSettingsProps.filter(prop => !(prop in settingsData));
+      
+      if (missingSettingsProps.length > 0) {
+        console.error(`❌ /api/settings missing required properties: ${missingSettingsProps.join(', ')}`);
+        console.error(`   Received: ${JSON.stringify(settingsData)}`);
+        allPassed = false;
+      }
+      
+      // Settings should NOT have stats properties
+      const forbiddenSettingsProps = ['active_repos', 'cached_packages', 'total_downloads'];
+      const wrongSettingsProps = forbiddenSettingsProps.filter(prop => prop in settingsData);
+      
+      if (wrongSettingsProps.length > 0) {
+        console.error(`❌ /api/settings has stats properties (route collision detected!): ${wrongSettingsProps.join(', ')}`);
+        console.error(`   Received: ${JSON.stringify(settingsData)}`);
+        allPassed = false;
+      }
+      
+      if (missingSettingsProps.length === 0 && wrongSettingsProps.length === 0) {
+        console.log('✅ /api/settings returns correct schema');
+      }
+    }
+
+    return allPassed;
+  } catch (error) {
+    console.error('❌ Admin endpoint validation failed:', error.message);
+    return false;
+  }
+}
+
 async function validateSpecStructure(spec) {
   const errors = [];
   
@@ -173,8 +260,9 @@ async function validateSpecStructure(spec) {
 async function main() {
   console.log('🔍 Validating API contract...\n');
   
-  // Fetch OpenAPI spec
+  // Fetch OpenAPI spec (also creates admin user and returns token)
   console.log(`Fetching OpenAPI spec from ${OPENAPI_URL}...`);
+  const adminToken = await createAdminUser();
   const spec = await fetchOpenAPISpec();
   console.log('✅ OpenAPI spec fetched\n');
   
@@ -190,7 +278,15 @@ async function main() {
     process.exit(1);
   }
   
+  // Test admin endpoints (critical for catching route collisions)
+  const adminValid = await testAdminEndpointSeparation(adminToken);
+  if (!adminValid) {
+    console.error('\n❌ Admin endpoint validation failed - possible route collision');
+    process.exit(1);
+  }
+  
   console.log('\n✅ API contract validation passed');
+  console.log('   All endpoints return correct schemas');
 }
 
 main().catch((error) => {
