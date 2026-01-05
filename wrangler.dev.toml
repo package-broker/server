@@ -19,9 +19,11 @@ binding = "KV"
 id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # Static Assets (UI)
+# not_found_handling enables SPA routing - returns index.html for unmatched routes
 [assets]
 directory = "packages/ui/dist"
 binding = "ASSETS"
+not_found_handling = "single-page-application"
 
 # R2 Bucket for artifacts
 [[r2_buckets]]

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, NavLink, Link, useLocation } from 'react-router';
+import { Routes, Route, NavLink, Link, useLocation, useNavigate } from 'react-router';
 import { Package, BarChart3, Key, ClipboardList, Info, Heart, LogOut, User as UserIcon } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Repositories } from './pages/Repositories';
@@ -19,6 +19,13 @@ function AppContent() {
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [setupRequired, setSetupRequired] = useState<boolean>(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Capture the intended URL on initial render (before any async operations)
+  // This ensures we preserve the deep link even during loading states
+  const [intendedPath] = useState(() => location.pathname + location.search);
 
   useEffect(() => {
     checkAuthRequired().then(({ authRequired, setupRequired }) => {
@@ -37,8 +44,6 @@ function AppContent() {
     );
   }
 
-  const location = useLocation();
-
   // Fresh Install Flow
   if (setupRequired) {
     return <Setup onSuccess={() => setSetupRequired(false)} />;
@@ -54,8 +59,9 @@ function AppContent() {
   }
 
   // Show login page if auth is required and not authenticated
+  // Use the captured intended path to redirect after successful login (deep linking support)
   if (authRequired && !isAuthenticated) {
-    return <Login onSuccess={() => { }} />;
+    return <Login onSuccess={() => navigate(intendedPath || '/', { replace: true })} />;
   }
 
   const navItems = [

@@ -13,13 +13,26 @@ export class LoginPage extends BasePage {
   readonly loginForm = () => this.getByTestId('login-form');
 
   // Actions
-  async login(email: string, password: string): Promise<void> {
+  
+  /**
+   * Fill and submit login form without waiting for navigation.
+   * Use this for testing error scenarios where login stays on the form.
+   */
+  async submitLogin(email: string, password: string): Promise<void> {
     await this.emailInput().waitFor({ state: 'visible' });
     await this.emailInput().fill(email);
     await this.passwordInput().fill(password);
     await this.submitButton().click();
-    // Wait for navigation after login
-    await this.page.waitForURL('**/', { timeout: 10000 });
+  }
+
+  /**
+   * Fill, submit login form and wait for successful navigation (form disappears).
+   * Use this for successful login scenarios.
+   */
+  async login(email: string, password: string): Promise<void> {
+    await this.submitLogin(email, password);
+    // Wait for login form to disappear (navigation may go to different URLs with deep linking)
+    await this.loginForm().waitFor({ state: 'hidden', timeout: 10000 });
   }
 
   async loginAsAdmin(): Promise<void> {

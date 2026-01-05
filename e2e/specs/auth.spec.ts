@@ -17,7 +17,8 @@ test.describe('Authentication', () => {
   });
 
   test('@all should show error with invalid credentials', async ({ loginPage }) => {
-    await loginPage.login('wrong@example.com', 'wrongpass');
+    // Use submitLogin instead of login because invalid credentials keep the form visible
+    await loginPage.submitLogin('wrong@example.com', 'wrongpass');
     await loginPage.expectErrorMessage('Invalid');
   });
 
@@ -26,5 +27,50 @@ test.describe('Authentication', () => {
     await page.waitForLoadState('networkidle');
     // Should show login form
     await loginPage.expectLoginFormVisible();
+  });
+
+  test('@all should preserve deep link URL after login - tokens page', async ({ page, loginPage, apiMocker }) => {
+    // Navigate directly to /tokens without being authenticated
+    await page.goto('/tokens');
+    await page.waitForLoadState('networkidle');
+    
+    // Should show login form
+    await loginPage.expectLoginFormVisible();
+    
+    // Login
+    await loginPage.loginAsAdmin();
+    
+    // Should be redirected to the original /tokens URL, not home
+    await expect(page).toHaveURL(/\/tokens/);
+  });
+
+  test('@all should preserve deep link URL after login - repositories page', async ({ page, loginPage, apiMocker }) => {
+    // Navigate directly to /repositories without being authenticated
+    await page.goto('/repositories');
+    await page.waitForLoadState('networkidle');
+    
+    // Should show login form
+    await loginPage.expectLoginFormVisible();
+    
+    // Login
+    await loginPage.loginAsAdmin();
+    
+    // Should be redirected to the original /repositories URL, not home
+    await expect(page).toHaveURL(/\/repositories/);
+  });
+
+  test('@all should preserve deep link URL after login - packages page', async ({ page, loginPage, apiMocker }) => {
+    // Navigate directly to /packages without being authenticated
+    await page.goto('/packages');
+    await page.waitForLoadState('networkidle');
+    
+    // Should show login form
+    await loginPage.expectLoginFormVisible();
+    
+    // Login
+    await loginPage.loginAsAdmin();
+    
+    // Should be redirected to the original /packages URL, not home
+    await expect(page).toHaveURL(/\/packages/);
   });
 });
