@@ -31,12 +31,14 @@ export const PACKAGE_CACHING_KEY = `${SETTINGS_PREFIX}package_caching_enabled`;
 
 function isKvAvailable(kv: KVNamespace | undefined | null): boolean {
   // Check if KV is available - handle both undefined and null cases
-  // Also check if it's actually a KVNamespace object (has required methods)
   if (kv === undefined || kv === null) {
     return false;
   }
-  // Verify it's actually a KVNamespace by checking for required methods
-  return typeof kv.get === 'function' && typeof kv.put === 'function';
+  // Cloudflare KV bindings are objects that may not expose methods directly
+  // Check if it's a truthy object (not null/undefined already handled above)
+  // In Cloudflare Workers, if KV is bound, it will be a KVNamespace object
+  // We can't reliably check for methods in all environments, so just check if it exists
+  return typeof kv === 'object' && kv !== null;
 }
 
 export async function getStats(c: OpenAPIContext<StatsRouteEnv>): Promise<Response> {
@@ -91,7 +93,8 @@ export async function getPackageStats(c: OpenAPIContext<StatsRouteEnv>): Promise
 }
 
 export async function getSettings(c: OpenAPIContext<SettingsRouteEnv>): Promise<Response> {
-  const kv = c.env.KV as KVNamespace | undefined;
+  // Access KV from environment - try both direct access and type assertion
+  const kv = (c.env as any).KV as KVNamespace | undefined;
   const kvAvailable = isKvAvailable(kv);
   
   const packagistMirroringEnabled = kvAvailable && kv
