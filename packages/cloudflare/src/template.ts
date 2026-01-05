@@ -46,12 +46,13 @@ function loadTemplate(targetDir: string): string {
 
 /**
  * Generate custom domain route configuration
+ * Note: custom_domain = true requires the pattern WITHOUT the /* suffix
  */
 function generateDomainRoutes(domain: string): string {
   return `
 # Custom domain route
 [[routes]]
-pattern = "${domain}/*"
+pattern = "${domain}"
 custom_domain = true
 `;
 }
