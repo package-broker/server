@@ -196,10 +196,8 @@ async function syncWithProviderIncludes(
 
       const packageData: ProviderPackageResponse = await response.json();
       
-      // Parse package versions - handle both array format (Packagist p2) and object format (traditional repos)
       const packageVersions = packageData.packages?.[packageName] || {};
       
-      // Normalize versions to handle both array and object formats
       const versionsArray = Array.isArray(packageVersions)
         ? packageVersions.map((metadata) => ({ version: metadata.version_normalized || metadata.version || String(metadata), metadata }))
         : Object.entries(packageVersions).map(([key, val]) => ({
@@ -208,7 +206,6 @@ async function syncWithProviderIncludes(
           }));
       
       for (const { version, metadata } of versionsArray) {
-        // Transform dist URL to absolute URL
         let distUrl = resolveDistUrl(baseUrl, metadata.dist?.url, packageName, version);
 
         allPackages.push({
@@ -322,7 +319,6 @@ function parseComposerPackagesJson(
         }));
     
     for (const { version, metadata } of versionsArray) {
-      // Transform dist URL to absolute URL
       const distUrl = resolveDistUrl(baseUrl, metadata.dist?.url, packageName, version);
 
       packages.push({
