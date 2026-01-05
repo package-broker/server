@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #root {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
   body {
     @apply antialiased;
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
@@ -109,6 +116,23 @@
 
   .prose img {
     @apply rounded-lg max-w-full h-auto my-4;
+  }
+
+  /* Prevent markdown content from causing horizontal overflow */
+  .markdown-content {
+    @apply overflow-x-hidden;
+  }
+
+  .markdown-content pre,
+  .markdown-content code,
+  .markdown-content table {
+    @apply overflow-x-auto max-w-full;
+  }
+
+  /* Ensure prose tables and pre elements scroll horizontally instead of overflowing */
+  .prose pre,
+  .prose table {
+    @apply overflow-x-auto max-w-full;
   }
 }
 
