@@ -26,6 +26,7 @@ export interface ComposerRouteEnv {
     QUEUE?: Queue; // Optional - only available on Workers Paid plan
     PACKAGE_STORAGE_WORKFLOW?: Workflow; // Optional - Cloudflare Workflow for background storage
     ENCRYPTION_KEY: string;
+    MAX_PACKAGE_VERSIONS?: string; // Optional - limit versions per package to reduce CPU time (default: 50, 0 = unlimited)
   };
   Variables: {
     storage: StorageDriver;
@@ -33,6 +34,9 @@ export interface ComposerRouteEnv {
     requestId?: string;
   };
 }
+
+/** Default maximum versions per package to avoid CPU timeout on Cloudflare Workers */
+const DEFAULT_MAX_VERSIONS = 50;
 
 /**
  * GET /packages.json
@@ -43,11 +47,8 @@ export async function packagesJsonRoute(c: Context<ComposerRouteEnv>): Promise<R
   const kvKey = 'packages:all:packages.json';
   const metadataKey = 'packages:all:metadata';
 
-  // First, check if there are pending repositories that need sync
-  // This must happen BEFORE returning cached data to ensure new repos are synced
   const hasPendingRepos = await syncPendingRepositories(c);
 
-  // If we synced repos, clear cache to get fresh data
   if (hasPendingRepos && c.env.KV) {
     await c.env.KV.delete(kvKey).catch(() => { });
     await c.env.KV.delete(metadataKey).catch(() => { });
@@ -151,8 +152,6 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   const cached = c.env.KV ? await c.env.KV.get(kvKey) : null;
 
   if (cached) {
-    // Return cached data directly - validation happens during storage, not retrieval
-    // This avoids expensive O(n) validation loops that consume CPU time
     try {
       const cachedData = JSON.parse(cached);
       // Validate cached data type and format
@@ -218,7 +217,8 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
 
   if (existingPackages.length > 0) {
     // Build response from database packages
-    const packageData = buildP2Response(packageName, existingPackages);
+    const maxVersions = getMaxVersions(c.env);
+    const packageData = buildP2Response(packageName, existingPackages, maxVersions);
 
     // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
     const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
@@ -275,17 +275,12 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
         );
 
         if (packageData) {
-          // Transform dist URLs in memory (lightweight, no D1 operations)
           const url = new URL(c.req.url);
           const baseUrl = `${url.protocol}//${url.host}`;
-          const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl);
+          const maxVersions = getMaxVersions(c.env);
+          const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl, maxVersions);
 
-          // Check if we should skip storage (for Free tier optimization)
           const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
-
-          // Store in D1 in background (doesn't block response)
-          // Priority: 1. Cloudflare Workflow (durable, high CPU limits)
-          //           2. waitUntil (best-effort, low CPU limits)
           if (!skipStorage) {
             const workflow = c.env.PACKAGE_STORAGE_WORKFLOW;
             const repoLogger = getLogger();
@@ -309,7 +304,6 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
                     instanceId: instance.id
                   });
                 } catch (e) {
-                  // Workflow creation failed - fall back to inline processing
                   repoLogger.warn('Workflow creation failed for repo, falling back to inline', {
                     packageName,
                     repoId: repo.id,
@@ -328,7 +322,6 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
                 }
               })());
             } else {
-              // Fallback to waitUntil (original behavior, may hit CPU limits)
               c.executionCtx.waitUntil((async () => {
                 try {
                   const db = c.get('database');
@@ -338,7 +331,6 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
                     repoLogger.warn('Package storage errors (background)', { packageName, repoId: repo.id, errors });
                   }
                 } catch (e) {
-                  // Ignore background errors - storage is best-effort
                   repoLogger.warn('Background storage failed', { packageName, repoId: repo.id, error: e instanceof Error ? e.message : String(e) });
                 }
               })());
@@ -454,38 +446,46 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
 }
 
 /**
- * Build Composer 2 provider response for a single package from stored metadata
- * Generates clean response with proper types from D1 stored data
- * 
- * NOTE: Composer 2 (p2) format expects versions as an ARRAY, not a dict keyed by version.
- * See: https://packagist.org/apidoc
+ * Build Composer 2 provider response for a single package from stored metadata.
+ * Composer 2 (p2) format expects versions as an ARRAY, not a dict keyed by version.
  */
 export function buildP2Response(
   packageName: string,
-  packageVersions: Array<typeof packages.$inferSelect>
+  packageVersions: Array<typeof packages.$inferSelect>,
+  maxVersions: number = DEFAULT_MAX_VERSIONS
 ): ComposerP2Response {
+  // Apply version limiting to DB records as well
+  // Convert to normalized format for limiting
+  const normalizedForLimiting = packageVersions.map(pkg => ({
+    version: pkg.version,
+    metadata: {
+      time: pkg.released_at ? new Date(pkg.released_at * 1000).toISOString() : undefined,
+      ...pkg, // Include all fields for reference
+    },
+  }));
+  
+  const limitedVersions = limitVersions(normalizedForLimiting, maxVersions);
+  const limitedVersionSet = new Set(limitedVersions.map(v => v.version));
+  
+  // Filter packageVersions to only include limited versions
+  const filteredPackageVersions = packageVersions.filter(pkg => limitedVersionSet.has(pkg.version));
+  
   const versions: any[] = [];
 
-  for (const pkg of packageVersions) {
-    // Build dist object from database columns (no metadata parse needed)
-    // Use dist_url (proxy URL) and transform to mirror format
-    // source_dist_url is the original external URL - don't expose it to clients
+  for (const pkg of filteredPackageVersions) {
     const dist: any = {
-      type: 'zip', // Default, can be overridden from metadata if needed
+      type: 'zip',
       url: transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
     };
     if (pkg.dist_reference) {
       dist.reference = pkg.dist_reference;
     }
 
-    // Build version object with required fields (from database columns)
     const versionData: any = {
       name: packageName,
       version: pkg.version,
       dist,
     };
-
-    // Use database columns first (no JSON parsing needed)
     if (pkg.description) {
       versionData.description = pkg.description;
     }
@@ -508,23 +508,12 @@ export function buildP2Response(
       versionData.homepage = pkg.homepage;
     }
     if (pkg.released_at) {
-      // Convert Unix timestamp to ISO 8601 string
       versionData.time = new Date(pkg.released_at * 1000).toISOString();
     }
 
-    // Only parse metadata if we need fields not in database columns
-    // This significantly reduces CPU usage for packages with many versions
-    // We parse metadata to get: source, require, autoload, and other dependency fields
     if (pkg.metadata) {
       try {
-        // Lazy parse: only extract fields we actually need
         const fullMetadata = JSON.parse(pkg.metadata);
-
-        // Only extract essential fields that aren't in database columns
-        // Essential: source, require, autoload (needed for Composer resolution)
-        // Optional: require-dev, autoload-dev, conflict, replace, provide, suggest, extra, bin, keywords, authors
-
-        // Source (not in columns, but commonly needed)
         if (fullMetadata.source !== null &&
           fullMetadata.source !== undefined &&
           fullMetadata.source !== '__unset' &&
@@ -539,15 +528,12 @@ export function buildP2Response(
           };
         }
 
-        // Dist type and shasum (if not default)
         if (fullMetadata.dist?.type && fullMetadata.dist.type !== 'zip') {
           dist.type = fullMetadata.dist.type;
         }
         if (fullMetadata.dist?.shasum) {
           dist.shasum = fullMetadata.dist.shasum;
         }
-
-        // Dependencies (essential for Composer)
         if (fullMetadata.require && typeof fullMetadata.require === 'object' && !Array.isArray(fullMetadata.require)) {
           versionData.require = fullMetadata.require;
         }
@@ -739,7 +725,8 @@ async function proxyToPackagist(
 
     // Transform dist URLs in memory (lightweight, no D1 operations)
     // This allows us to return the response immediately before hitting CPU limits
-    const transformedData = transformDistUrlsInMemory(packageData, 'packagist', baseUrl);
+    const maxVersions = getMaxVersions(c.env);
+    const transformedData = transformDistUrlsInMemory(packageData, 'packagist', baseUrl, maxVersions);
 
     // Check if we should skip storage (for Free tier optimization)
     const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
@@ -939,11 +926,17 @@ function transformDistUrlToMirrorFormat(url: string | null): string | null {
  * 
  * NOTE: Composer 2 (p2) format expects versions as an ARRAY, not a dict keyed by version.
  * See: https://packagist.org/apidoc
+ * 
+ * @param packageData - Raw package data from upstream
+ * @param repoId - Repository identifier
+ * @param proxyBaseUrl - Base URL for proxy dist URLs
+ * @param maxVersions - Maximum versions per package (0 = unlimited, default: 50)
  */
 function transformDistUrlsInMemory(
   packageData: any,
   repoId: string,
-  proxyBaseUrl: string
+  proxyBaseUrl: string,
+  maxVersions: number = DEFAULT_MAX_VERSIONS
 ): any {
   if (!packageData.packages) {
     return packageData;
@@ -957,8 +950,10 @@ function transformDistUrlsInMemory(
     // Sanitize metadata to remove __unset values that break Composer
     const sanitizedVersions = sanitizeMetadata(versions);
     const normalizedVersions = normalizePackageVersions(sanitizedVersions);
+    // Apply version limiting to reduce CPU processing time
+    const limitedVersions = limitVersions(normalizedVersions, maxVersions);
 
-    for (const { version, metadata } of normalizedVersions) {
+    for (const { version, metadata } of limitedVersions) {
       // Use existing reference or generate simple one (no expensive crypto)
       const distReference = metadata.dist?.reference || `${pkgName.replace('/', '-')}-${version}`.substring(0, 40);
 
@@ -990,25 +985,85 @@ function transformDistUrlsInMemory(
   return result;
 }
 
-/**
- * Normalize package versions to handle both array format (Packagist p2) and object format (traditional repos)
- * Returns array of { version: string, metadata: any }
- */
 function normalizePackageVersions(versions: any): Array<{ version: string; metadata: any }> {
   if (Array.isArray(versions)) {
-    // Packagist p2 format: [{version: "3.9.0", ...}, {version: "3.8.1", ...}]
     return versions.map((metadata) => ({
-      version: metadata.version || String(metadata),
+      version: metadata.version_normalized || metadata.version || String(metadata),
       metadata,
     }));
   } else if (typeof versions === 'object' && versions !== null) {
-    // Traditional Composer repo format: {"3.9.0": {...}, "3.8.1": {...}}
     return Object.entries(versions).map(([key, val]) => ({
-      version: (val as any)?.version || key,
+      version: (val as any)?.version_normalized || (val as any)?.version || key,
       metadata: val,
     }));
   }
   return [];
+}
+
+function limitVersions(
+  versions: Array<{ version: string; metadata: any }>,
+  maxVersions: number
+): Array<{ version: string; metadata: any }> {
+  if (maxVersions <= 0 || versions.length <= maxVersions) {
+    return versions;
+  }
+
+  const devVersions: typeof versions = [];
+  const stableVersions: typeof versions = [];
+
+  for (const v of versions) {
+    if (v.version.startsWith('dev-') || v.version.includes('-dev')) {
+      devVersions.push(v);
+    } else {
+      stableVersions.push(v);
+    }
+  }
+
+  stableVersions.sort((a, b) => {
+    const timeA = a.metadata.time ? new Date(a.metadata.time).getTime() : 0;
+    const timeB = b.metadata.time ? new Date(b.metadata.time).getTime() : 0;
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+    return b.version.localeCompare(a.version);
+  });
+
+  const maxDevVersions = Math.min(devVersions.length, Math.ceil(maxVersions * 0.2));
+  const maxStableVersions = maxVersions - maxDevVersions;
+
+  const limitedStable = stableVersions.slice(0, maxStableVersions);
+  const limitedDev = devVersions.slice(0, maxDevVersions);
+
+  const logger = getLogger();
+  if (stableVersions.length > maxStableVersions || devVersions.length > maxDevVersions) {
+    logger.debug('Version limiting applied', {
+      originalCount: versions.length,
+      stableCount: stableVersions.length,
+      devCount: devVersions.length,
+      limitedStableCount: limitedStable.length,
+      limitedDevCount: limitedDev.length,
+      maxVersions,
+    });
+  }
+
+  return [...limitedDev, ...limitedStable];
+}
+
+function getMaxVersions(env: ComposerRouteEnv['Bindings']): number {
+  const envValue = env.MAX_PACKAGE_VERSIONS;
+  
+  if (envValue !== undefined && envValue !== '') {
+    const parsed = parseInt(envValue, 10);
+    return isNaN(parsed) ? DEFAULT_MAX_VERSIONS : parsed;
+  }
+  
+  const isPaidTier = env.QUEUE !== undefined;
+  
+  if (isPaidTier) {
+    return 0;
+  }
+  
+  return DEFAULT_MAX_VERSIONS;
 }
 
 /**

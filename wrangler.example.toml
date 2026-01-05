@@ -13,6 +13,13 @@ ENCRYPTION_KEY = "REPLACE_WITH_YOUR_32_BYTE_KEY_BASE64"
 # Optional: Set to restrict admin API access
 # ADMIN_TOKEN = "your-admin-token"
 
+# Maximum package versions to return per package (reduces CPU time for packages with 100+ versions)
+# Auto-detected based on tier:
+#   - Free tier (no QUEUE): defaults to 50 versions
+#   - Paid tier (with QUEUE): defaults to unlimited (0)
+# Uncomment to override the auto-detected default:
+# MAX_PACKAGE_VERSIONS = "50"
+
 # Workers Logs (free tier: 200k events/day, 3-day retention)
 # View logs in Cloudflare Dashboard: Workers & Pages > Your Worker > Logs
 [observability]
