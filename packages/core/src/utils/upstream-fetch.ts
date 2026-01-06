@@ -26,6 +26,34 @@ import semver from 'semver';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
+/**
+ * Allowed GitHub hostnames for security validation.
+ * This prevents URL substring attacks like "github.com.evil.com"
+ */
+const ALLOWED_GITHUB_HOSTNAMES = ['github.com', 'www.github.com'];
+
+/**
+ * Safely check if a URL is a valid GitHub repository URL.
+ * Uses proper URL parsing and hostname validation to prevent security issues.
+ * 
+ * @param url - The URL to validate
+ * @returns true if the URL is a valid GitHub URL, false otherwise
+ */
+export function isGitHubUrl(url: string): boolean {
+  try {
+    // Handle URLs without scheme (e.g., "github.com/owner/repo")
+    const urlWithScheme = url.startsWith('http://') || url.startsWith('https://') 
+      ? url 
+      : `https://${url}`;
+    
+    const parsed = new URL(urlWithScheme);
+    return ALLOWED_GITHUB_HOSTNAMES.includes(parsed.hostname.toLowerCase());
+  } catch {
+    // If URL parsing fails, it's not a valid URL
+    return false;
+  }
+}
+
 export interface UpstreamRepository {
   id: string;
   url: string;

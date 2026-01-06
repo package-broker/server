@@ -361,9 +361,15 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
           packageName,
           c.env.ENCRYPTION_KEY
         );
-      } else if (repo.vcs_type === 'git' && repo.url.includes('github.com')) {
+      } else if (repo.vcs_type === 'git') {
         // Fetch from GitHub repository (public or private)
-        const { fetchPackageFromGitHub } = await import('../utils/upstream-fetch');
+        const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
+        
+        // Validate GitHub URL using proper hostname check (security)
+        if (!isGitHubUrl(repo.url)) {
+          // Skip non-GitHub git repos (e.g., GitLab, Bitbucket - not yet supported)
+          continue;
+        }
         packageData = await fetchPackageFromGitHub(
           {
             id: repo.id,

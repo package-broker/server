@@ -11,6 +11,7 @@ import { repositories } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { createRepositorySchema, updateRepositorySchema, buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { encryptCredentials, decryptCredentials } from '../../utils/encryption';
+import { isGitHubUrl } from '../../utils/upstream-fetch';
 import { nanoid } from 'nanoid';
 import { getAnalytics } from '../../utils/analytics';
 
@@ -374,6 +375,11 @@ async function validateGitHubRepository(
   encryptionKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validate GitHub URL using proper hostname check (security)
+    if (!isGitHubUrl(repo.url)) {
+      return { success: false, error: 'Invalid GitHub URL. Only github.com URLs are supported.' };
+    }
+
     // Parse GitHub URL to get owner and repo name
     const urlMatch = repo.url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
     if (!urlMatch) {
