@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import type { OpenAPIContext } from '../../routes/api/types';
 import type { DatabasePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
-import { eq, like, and, sql, count } from 'drizzle-orm';
+import { eq, like, and, sql, count, countDistinct, inArray } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
 import type { StorageDriver } from '../../storage/driver';
 import { buildStorageKey, buildReadmeStorageKey, buildChangelogStorageKey } from '../../storage/driver';
@@ -30,6 +30,7 @@ export interface PackagesRouteEnv {
 /**
  * GET /api/packages
  * List all packages with optional search and pagination
+ * Paginates by unique package names (not individual versions)
  */
 export async function listPackages(c: OpenAPIContext<PackagesRouteEnv, any, any, { search?: string; page?: number; limit?: number }>): Promise<Response> {
   const db = c.get('database');
@@ -42,28 +43,49 @@ export async function listPackages(c: OpenAPIContext<PackagesRouteEnv, any, any,
   // Build where clause
   const whereClause = search ? like(packages.name, `%${search}%`) : undefined;
 
-  // Get total count
+  // Get total count of UNIQUE package names
   const [countResult] = await db
-    .select({ count: count() })
+    .select({ count: countDistinct(packages.name) })
     .from(packages)
     .where(whereClause);
 
   const total = countResult?.count ?? 0;
   const totalPages = Math.ceil(total / limit);
 
-  // Get paginated results
-  let query_builder = db
-    .select()
+  // Get paginated UNIQUE package names
+  let namesQuery = db
+    .selectDistinct({ name: packages.name })
     .from(packages)
     .orderBy(packages.name)
     .limit(limit)
     .offset(offset);
 
   if (whereClause) {
-    query_builder = query_builder.where(whereClause) as typeof query_builder;
+    namesQuery = namesQuery.where(whereClause) as typeof namesQuery;
   }
 
-  const data = await query_builder;
+  const packageNames = await namesQuery;
+  const names = packageNames.map((p: { name: string }) => p.name);
+
+  // If no packages found, return empty result
+  if (names.length === 0) {
+    return c.json({
+      data: [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  }
+
+  // Fetch all versions for the paginated package names
+  const data = await db
+    .select()
+    .from(packages)
+    .where(inArray(packages.name, names))
+    .orderBy(packages.name);
 
   return c.json({
     data,
