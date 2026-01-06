@@ -341,6 +341,8 @@ function parseComposerPackagesJson(
           : undefined,
         require: metadata.require,
         'require-dev': metadata['require-dev'],
+        // Store complete upstream metadata to preserve original version strings
+        rawMetadata: metadata,
       });
     }
   }

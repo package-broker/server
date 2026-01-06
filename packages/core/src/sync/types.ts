@@ -17,6 +17,8 @@ export interface ComposerPackage {
   'require-dev'?: Record<string, string>;
   autoload?: object;
   readme?: string;
+  /** Complete upstream package version object for preserving original version strings */
+  rawMetadata?: Record<string, unknown>;
 }
 
 export interface SyncResult {
