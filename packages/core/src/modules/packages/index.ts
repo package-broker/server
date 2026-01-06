@@ -16,6 +16,8 @@ packagesModule.openapi(routes.listPackagesRouteDef, handlers.listPackages as any
 packagesModule.openapi(routes.getPackageRouteDef, handlers.getPackage as any);
 packagesModule.openapi(routes.getPackageReadmeRouteDef, handlers.getPackageReadme as any);
 packagesModule.openapi(routes.getPackageChangelogRouteDef, handlers.getPackageChangelog as any);
+packagesModule.openapi(routes.uploadPackageRouteDef, handlers.uploadPackage as any);
+packagesModule.openapi(routes.deletePackageVersionRouteDef, handlers.deletePackageVersion as any);
 
 // Non-OpenAPI routes
 packagesModule.post('/add-from-mirror', handlers.addPackagesFromMirror);

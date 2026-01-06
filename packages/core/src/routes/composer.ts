@@ -1028,12 +1028,16 @@ function transformDistUrlsInMemory(
 function normalizePackageVersions(versions: any): Array<{ version: string; metadata: any }> {
   if (Array.isArray(versions)) {
     return versions.map((metadata) => ({
-      version: metadata.version_normalized || metadata.version || String(metadata),
+      // Use original `version` field, NOT `version_normalized`
+      // Composer lock files use original versions (e.g., "v7.17.3", "103.0.7-p7")
+      // while version_normalized is a 4-part format (e.g., "7.17.3.0", "103.0.7.0-patch7")
+      version: metadata.version || metadata.version_normalized || String(metadata),
       metadata,
     }));
   } else if (typeof versions === 'object' && versions !== null) {
     return Object.entries(versions).map(([key, val]) => ({
-      version: (val as any)?.version_normalized || (val as any)?.version || key,
+      // Use original `version` field, NOT `version_normalized`
+      version: (val as any)?.version || (val as any)?.version_normalized || key,
       metadata: val,
     }));
   }

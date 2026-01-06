@@ -198,10 +198,12 @@ async function syncWithProviderIncludes(
       
       const packageVersions = packageData.packages?.[packageName] || {};
       
+      // Use original `version` field, NOT `version_normalized`
+      // Lock files reference original versions (e.g., "v7.17.3", "103.0.7-p7")
       const versionsArray = Array.isArray(packageVersions)
-        ? packageVersions.map((metadata) => ({ version: metadata.version_normalized || metadata.version || String(metadata), metadata }))
+        ? packageVersions.map((metadata) => ({ version: metadata.version || metadata.version_normalized || String(metadata), metadata }))
         : Object.entries(packageVersions).map(([key, val]) => ({
-            version: (val as any)?.version_normalized || (val as any)?.version || key,
+            version: (val as any)?.version || (val as any)?.version_normalized || key,
             metadata: val,
           }));
       
@@ -311,10 +313,11 @@ function parseComposerPackagesJson(
 
   for (const [packageName, versions] of Object.entries(data.packages || {})) {
     // Normalize versions to handle both array format (Packagist p2) and object format (traditional repos)
+    // Use original `version` field, NOT `version_normalized` - lock files use original versions
     const versionsArray = Array.isArray(versions)
-      ? versions.map((metadata) => ({ version: metadata.version_normalized || metadata.version || String(metadata), metadata }))
+      ? versions.map((metadata) => ({ version: metadata.version || metadata.version_normalized || String(metadata), metadata }))
       : Object.entries(versions).map(([key, val]) => ({
-          version: (val as any)?.version_normalized || (val as any)?.version || key,
+          version: (val as any)?.version || (val as any)?.version_normalized || key,
           metadata: val,
         }));
     

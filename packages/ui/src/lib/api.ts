@@ -188,6 +188,7 @@ export interface Package {
   homepage: string | null;
   released_at: number | null;
   readme_content: string | null;
+  is_manual_upload: number; // 0 or 1
   created_at: number;
 }
 
@@ -198,6 +199,41 @@ export async function getPackages(search?: string) {
 
 export async function getPackage(name: string) {
   return fetchApi<{ name: string; versions: Package[] }>(`/packages/${encodeURIComponent(name)}`);
+}
+
+export async function uploadPackage(file: File): Promise<{ 
+  message: string; 
+  package: { id: string; name: string; version: string; description: string | null } 
+}> {
+  const token = getAuthToken();
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE}/packages/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Upload failed' })) as { 
+      message?: string; 
+      details?: string[] 
+    };
+    
+    if (errorData.details && errorData.details.length > 0) {
+      throw new Error(`${errorData.message || 'Upload failed'}\n${errorData.details.join('\n')}`);
+    }
+    
+    throw new Error(errorData.message || `HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 export async function getPackageReadme(name: string, version: string): Promise<string | null> {
@@ -258,6 +294,22 @@ export interface PackageStats {
 
 export async function getPackageStats(name: string, version: string): Promise<PackageStats> {
   return fetchApi<PackageStats>(`/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}/stats`);
+}
+
+export interface DeletePackageVersionResponse {
+  message: string;
+  deleted: {
+    name: string;
+    version: string;
+    filesRemoved: number;
+  };
+}
+
+export async function deletePackageVersion(name: string, version: string): Promise<DeletePackageVersionResponse> {
+  return fetchApi<DeletePackageVersionResponse>(
+    `/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    { method: 'DELETE' }
+  );
 }
 
 // Settings

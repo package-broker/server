@@ -810,6 +810,257 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
 }
 
 /**
+ * POST /api/packages/upload
+ * Upload a package archive with composer.json metadata
+ * 
+ * Performance optimized for Cloudflare Workers:
+ * - Validates archive before storage
+ * - Automatically creates "manual" repository if needed
+ * - Stores in private storage
+ * - Extracts README for better UX
+ */
+export async function uploadPackage(c: OpenAPIContext<PackagesRouteEnv>): Promise<Response> {
+  const logger = getLogger();
+  const db = c.get('database');
+  const storage = c.get('storage');
+  const now = Math.floor(Date.now() / 1000);
+
+  // Parse multipart form data
+  const body = await c.req.parseBody();
+  const file = body.file;
+
+  if (!file || !(file instanceof File)) {
+    return c.json(
+      {
+        error: 'Bad Request',
+        message: 'Missing or invalid file upload',
+      },
+      400
+    );
+  }
+
+  // Check file size (max 100MB)
+  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+  if (file.size > MAX_FILE_SIZE) {
+    return c.json(
+      {
+        error: 'Payload Too Large',
+        message: `File too large: ${Math.round(file.size / 1024 / 1024)}MB (max 100MB)`,
+      },
+      413
+    );
+  }
+
+  // Convert file to Uint8Array
+  const arrayBuffer = await file.arrayBuffer();
+  const archiveData = new Uint8Array(arrayBuffer);
+  
+  // Comprehensive debug logging
+  const firstBytes = Array.from(archiveData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  logger.info('Package upload received', { 
+    fileName: file.name, 
+    fileSize: file.size, 
+    fileType: file.type,
+    arrayBufferSize: arrayBuffer.byteLength,
+    archiveDataSize: archiveData.length,
+    firstBytes,
+    isValidZipMagic: archiveData[0] === 0x50 && archiveData[1] === 0x4B,
+  });
+
+  // Validate package archive and extract composer.json
+  const { validatePackageArchive, extractReadme: extractReadmeFromValidator } = await import('../../utils/package-validator.js');
+  const validation = await validatePackageArchive(archiveData);
+  
+  // Log validation result for debugging
+  if (!validation.success) {
+    logger.warn('Package validation failed', {
+      fileName: file.name,
+      errors: validation.errors,
+    });
+  }
+
+  if (!validation.success || !validation.metadata) {
+    return c.json(
+      {
+        error: 'Bad Request',
+        message: 'Invalid package archive',
+        details: validation.errors || [],
+      },
+      400
+    );
+  }
+
+  const metadata = validation.metadata;
+  const { name, version } = metadata;
+
+  // Check if package+version already exists
+  const [existing] = await db
+    .select()
+    .from(packages)
+    .where(and(eq(packages.name, name), eq(packages.version, version)))
+    .limit(1);
+
+  if (existing) {
+    return c.json(
+      {
+        error: 'Conflict',
+        message: `Package ${name}@${version} already exists`,
+      },
+      409
+    );
+  }
+
+  // Ensure "manual" repository exists
+  const MANUAL_REPO_ID = 'manual';
+  const [manualRepo] = await db
+    .select()
+    .from(repositories)
+    .where(eq(repositories.id, MANUAL_REPO_ID))
+    .limit(1);
+
+  if (!manualRepo) {
+    // Create manual repository
+    try {
+      await db.insert(repositories).values({
+        id: MANUAL_REPO_ID,
+        url: 'manual://uploads',
+        vcs_type: 'manual',
+        credential_type: 'none',
+        auth_credentials: '{}', // Empty credentials
+        composer_json_path: null,
+        package_filter: null,
+        status: 'active',
+        error_message: null,
+        last_synced_at: now,
+        created_at: now,
+      });
+      logger.info('Created manual repository for uploads');
+    } catch (error) {
+      logger.error('Failed to create manual repository', {}, error instanceof Error ? error : new Error(String(error)));
+      return c.json(
+        {
+          error: 'Internal Server Error',
+          message: 'Failed to create manual repository',
+        },
+        500
+      );
+    }
+  }
+
+  // Store archive in private storage
+  const storageKey = buildStorageKey('private', MANUAL_REPO_ID, name, version);
+  
+  try {
+    // Convert to ArrayBuffer for storage (avoid SharedArrayBuffer)
+    const storageBuffer = archiveData.buffer.slice(
+      archiveData.byteOffset,
+      archiveData.byteOffset + archiveData.byteLength
+    ) as ArrayBuffer;
+
+    await storage.put(storageKey, storageBuffer);
+    logger.info('Stored package archive', { name, version, storageKey, size: archiveData.length });
+  } catch (error) {
+    logger.error('Failed to store package archive', { name, version }, error instanceof Error ? error : new Error(String(error)));
+    return c.json(
+      {
+        error: 'Internal Server Error',
+        message: 'Failed to store package archive',
+      },
+      500
+    );
+  }
+
+  // Create artifact record
+  const artifactId = nanoid();
+  try {
+    await db.insert(artifacts).values({
+      id: artifactId,
+      repo_id: MANUAL_REPO_ID,
+      package_name: name,
+      version: version,
+      file_key: storageKey,
+      size: archiveData.length,
+      download_count: 0,
+      created_at: now,
+      last_downloaded_at: null,
+    });
+  } catch (error) {
+    logger.error('Failed to create artifact record', { name, version }, error instanceof Error ? error : new Error(String(error)));
+    // Continue - package is stored, artifact record is optional
+  }
+
+  // Extract README if available (best effort)
+  let readmeContent: string | null = null;
+  try {
+    readmeContent = extractReadmeFromValidator(archiveData);
+    if (readmeContent) {
+      const readmeKey = buildReadmeStorageKey('private', MANUAL_REPO_ID, name, version);
+      const readmeBytes = new TextEncoder().encode(readmeContent);
+      await storage.put(readmeKey, readmeBytes).catch((err) => {
+        logger.warn('Failed to store README', { name, version, error: err instanceof Error ? err.message : String(err) });
+      });
+    }
+  } catch (error) {
+    logger.warn('Failed to extract README', { name, version, error: error instanceof Error ? error.message : String(error) });
+    // Continue - README is optional
+  }
+
+  // Build dist URL for Composer
+  const url = new URL(c.req.url);
+  const baseUrl = `${url.protocol}//${url.host}`;
+  const distUrl = `${baseUrl}/dist/${MANUAL_REPO_ID}/${name}/${version}`;
+
+  // Create package record with manual upload flag
+  const packageId = nanoid();
+  const releasedAt = metadata.time ? Math.floor(new Date(metadata.time).getTime() / 1000) : now;
+
+  try {
+    await db.insert(packages).values({
+      id: packageId,
+      repo_id: MANUAL_REPO_ID,
+      name: name,
+      version: version,
+      dist_url: distUrl,
+      source_dist_url: null, // No source for manual uploads
+      dist_reference: `manual-${version}`,
+      description: metadata.description || null,
+      license: metadata.license ? JSON.stringify(metadata.license) : null,
+      package_type: metadata.type || 'library',
+      homepage: metadata.homepage || null,
+      released_at: releasedAt,
+      readme_content: readmeContent,
+      metadata: JSON.stringify(metadata),
+      is_manual_upload: 1, // Mark as manual upload
+      created_at: now,
+    });
+
+    logger.info('Created package record for manual upload', { name, version, packageId });
+  } catch (error) {
+    logger.error('Failed to create package record', { name, version }, error instanceof Error ? error : new Error(String(error)));
+    return c.json(
+      {
+        error: 'Internal Server Error',
+        message: 'Failed to create package record',
+      },
+      500
+    );
+  }
+
+  return c.json(
+    {
+      message: 'Package uploaded successfully',
+      package: {
+        id: packageId,
+        name: name,
+        version: version,
+        description: metadata.description || null,
+      },
+    },
+    201
+  );
+}
+
+/**
  * POST /packages/cleanup-numeric-versions
  * Temporary utility to fix versioning issues
  */
@@ -817,4 +1068,120 @@ export async function cleanupNumericVersions(c: Context<PackagesRouteEnv>): Prom
   // Stub implementation to satisfy export requirements
   // Real implementation would clean up numeric versions like x.y.z.0
   return c.json({ message: 'Cleanup not implemented in this adapter version' });
+}
+
+/**
+ * DELETE /api/packages/:name/:version
+ * Delete a specific package version
+ * Removes: package record, artifact record, and stored files (archive, README, changelog)
+ */
+export async function deletePackageVersion(c: OpenAPIContext<PackagesRouteEnv>): Promise<Response> {
+  const logger = getLogger();
+  const { name: nameParam, version } = c.req.valid('param');
+  const name = decodeURIComponent(nameParam);
+  
+  const db = c.get('database');
+  const storage = c.get('storage');
+
+  // Find the package version
+  const [pkg] = await db
+    .select()
+    .from(packages)
+    .where(and(eq(packages.name, name), eq(packages.version, version)))
+    .limit(1);
+
+  if (!pkg) {
+    return c.json(
+      {
+        error: 'Not Found',
+        message: `Package ${name}@${version} not found`,
+      },
+      404
+    );
+  }
+
+  let filesRemoved = 0;
+  const storageType = pkg.repo_id === 'packagist' ? 'public' : 'private';
+
+  // Find and delete artifact
+  const [artifact] = await db
+    .select()
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.repo_id, pkg.repo_id),
+        eq(artifacts.package_name, name),
+        eq(artifacts.version, version)
+      )
+    )
+    .limit(1);
+
+  if (artifact) {
+    // Delete archive file from storage
+    try {
+      await storage.delete(artifact.file_key);
+      filesRemoved++;
+      logger.info('Deleted package archive from storage', { name, version, key: artifact.file_key });
+    } catch (error) {
+      logger.warn('Failed to delete archive file', { 
+        name, 
+        version, 
+        key: artifact.file_key,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+
+    // Delete artifact record
+    try {
+      await db.delete(artifacts).where(eq(artifacts.id, artifact.id));
+    } catch (error) {
+      logger.warn('Failed to delete artifact record', { 
+        name, 
+        version,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  // Delete README from storage (best effort)
+  try {
+    const readmeKey = buildReadmeStorageKey(storageType, pkg.repo_id, name, version);
+    await storage.delete(readmeKey);
+    filesRemoved++;
+  } catch {
+    // README might not exist, ignore error
+  }
+
+  // Delete CHANGELOG from storage (best effort)
+  try {
+    const changelogKey = buildChangelogStorageKey(storageType, pkg.repo_id, name, version);
+    await storage.delete(changelogKey);
+    filesRemoved++;
+  } catch {
+    // CHANGELOG might not exist, ignore error
+  }
+
+  // Delete package record
+  try {
+    await db.delete(packages).where(eq(packages.id, pkg.id));
+    logger.info('Deleted package version', { name, version, packageId: pkg.id, filesRemoved });
+  } catch (error) {
+    logger.error('Failed to delete package record', { name, version }, error instanceof Error ? error : new Error(String(error)));
+    return c.json(
+      {
+        error: 'Internal Server Error',
+        message: 'Failed to delete package record',
+      },
+      500
+    );
+  }
+
+  return c.json({
+    message: `Package ${name}@${version} deleted successfully`,
+    deleted: {
+      name,
+      version,
+      filesRemoved,
+    },
+  });
 }

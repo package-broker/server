@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router';
-import { Package as PackageIcon, X } from 'lucide-react';
+import { Package as PackageIcon, X, Upload, Package2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import semver from 'semver';
-import { getPackages, type Package, getRepositories, getSettings, addPackagesFromMirror, type Repository } from '../lib/api';
+import { getPackages, type Package, getRepositories, getSettings, addPackagesFromMirror, uploadPackage, deletePackageVersion, type Repository } from '../lib/api';
 
 const STORAGE_KEY = 'composer_proxy_admin_token';
 
@@ -157,6 +157,17 @@ export function Packages() {
 function PackageCard({ name, versions }: { name: string; versions: Package[] }) {
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ packageName, version }: { packageName: string; version: string }) =>
+      deletePackageVersion(packageName, version),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setDeleteConfirm(null);
+    },
+  });
 
   // Sort versions by semantic version (highest first)
   const sortedVersions = useMemo(() => {
@@ -296,17 +307,67 @@ function PackageCard({ name, versions }: { name: string; versions: Package[] }) 
                 data-version={version.version}
                 role="listitem"
               >
-                <div>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="font-medium text-slate-200">{version.version}</span>
                   {version.released_at && (
-                    <span className="text-sm text-slate-500 ml-2" aria-label={`Released ${new Date(version.released_at * 1000).toLocaleDateString()}`}>
-                      Released {new Date(version.released_at * 1000).toLocaleDateString()}
+                    <span className="text-sm text-slate-500" aria-label={`Released ${new Date(version.released_at * 1000).toLocaleDateString()}`}>
+                      {new Date(version.released_at * 1000).toLocaleDateString()}
+                    </span>
+                  )}
+                  {version.is_manual_upload === 1 && (
+                    <span className="px-2 py-0.5 text-xs bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded">
+                      📤 Manual
                     </span>
                   )}
                 </div>
-                <DownloadButton distUrl={version.dist_url} />
+                <div className="flex items-center gap-2">
+                  <DownloadButton distUrl={version.dist_url} />
+                  {deleteConfirm === version.version ? (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMutation.mutate({ packageName: name, version: version.version });
+                        }}
+                        disabled={deleteMutation.isPending}
+                        className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded disabled:opacity-50"
+                        title="Confirm delete"
+                      >
+                        {deleteMutation.isPending ? '...' : 'Delete'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirm(null);
+                        }}
+                        className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                        title="Cancel"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirm(version.version);
+                      }}
+                      className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                      title="Delete this version"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
+            {deleteMutation.isError && (
+              <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-sm text-red-400">
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete'}
+              </div>
+            )}
           </div>
           {hasMoreVersions && !showAll && (
             <button
@@ -328,8 +389,11 @@ function PackageCard({ name, versions }: { name: string; versions: Package[] }) 
 }
 
 function AddPackagesModal({ onClose }: { onClose: () => void }) {
+  const [mode, setMode] = useState<'fetch' | 'upload'>('fetch');
   const [packageNames, setPackageNames] = useState('');
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const queryClient = useQueryClient();
 
   // Get repositories and settings
@@ -398,95 +462,246 @@ function AddPackagesModal({ onClose }: { onClose: () => void }) {
     },
   });
 
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadPackage(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setSelectedFile(null);
+      onClose();
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Parse package names (comma, space, or newline separated)
-    const names = packageNames
-      .split(/[,\s\n]+/)
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0);
+    if (mode === 'fetch') {
+      // Parse package names (comma, space, or newline separated)
+      const names = packageNames
+        .split(/[,\s\n]+/)
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0);
 
-    if (names.length === 0) {
-      return;
+      if (names.length === 0) {
+        return;
+      }
+
+      if (!selectedRepositoryId) {
+        return;
+      }
+
+      addMutation.mutate({
+        repositoryId: selectedRepositoryId,
+        packageNames: names,
+      });
+    } else {
+      // Upload mode
+      if (!selectedFile) {
+        return;
+      }
+
+      uploadMutation.mutate(selectedFile);
     }
+  };
 
-    if (!selectedRepositoryId) {
-      return;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.name.endsWith('.zip')) {
+        setSelectedFile(file);
+      } else {
+        alert('Please upload a ZIP file');
+      }
     }
+  };
 
-    addMutation.mutate({
-      repositoryId: selectedRepositoryId,
-      packageNames: names,
-    });
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setSelectedFile(files[0]);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="card max-w-2xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="font-display text-xl font-bold text-slate-100">Add Mirrored Package(s)</h3>
+          <h3 className="font-display text-xl font-bold text-slate-100">Add Package</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-slate-700">
+          <button
+            onClick={() => setMode('fetch')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+              mode === 'fetch'
+                ? 'border-primary-500 text-primary-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Package2 className="w-4 h-4" />
+              Fetch from Repository
+            </div>
+          </button>
+          <button
+            onClick={() => setMode('upload')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+              mode === 'upload'
+                ? 'border-primary-500 text-primary-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Upload Package
+            </div>
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label">Package name(s), separated by comma, spaces or newlines</label>
-            <textarea
-              value={packageNames}
-              onChange={(e) => setPackageNames(e.target.value)}
-              placeholder="vendor/package1&#10;vendor/package2&#10;vendor/package3"
-              className="input w-full min-h-[120px] resize-y font-mono text-sm"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="label">Mirrored Repository</label>
-            <select
-              value={selectedRepositoryId}
-              onChange={(e) => setSelectedRepositoryId(e.target.value)}
-              className="input w-full"
-              required
-            >
-              {availableRepositories.length === 0 ? (
-                <option value="">No repositories available</option>
-              ) : (
-                availableRepositories.map((repo) => (
-                  <option key={repo.id} value={repo.id}>
-                    {repo.displayName}
-                  </option>
-                ))
-              )}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              You can set up mirrored third party repositories on the settings page.
-            </p>
-          </div>
-
-          {addMutation.error && (
-            <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
-              <p className="text-red-400 text-sm">
-                {(addMutation.error as Error).message}
-              </p>
-            </div>
-          )}
-
-          {addMutation.data && (
-            <div className="bg-slate-800/50 rounded-lg p-4">
-              <p className="text-slate-200 text-sm mb-2">{addMutation.data.message}</p>
-              <div className="space-y-1 text-xs">
-                {addMutation.data.results.map((result, idx) => (
-                  <div key={idx} className={result.success ? 'text-green-400' : 'text-red-400'}>
-                    {result.package}: {result.success
-                      ? `✓ ${result.versions} version(s) stored`
-                      : `✗ ${result.error}`}
-                  </div>
-                ))}
+          {mode === 'fetch' ? (
+            <>
+              <div>
+                <label className="label">Package name(s), separated by comma, spaces or newlines</label>
+                <textarea
+                  value={packageNames}
+                  onChange={(e) => setPackageNames(e.target.value)}
+                  placeholder="vendor/package1&#10;vendor/package2&#10;vendor/package3"
+                  className="input w-full min-h-[120px] resize-y font-mono text-sm"
+                  required
+                />
               </div>
-            </div>
+
+              <div>
+                <label className="label">Mirrored Repository</label>
+                <select
+                  value={selectedRepositoryId}
+                  onChange={(e) => setSelectedRepositoryId(e.target.value)}
+                  className="input w-full"
+                  required
+                >
+                  {availableRepositories.length === 0 ? (
+                    <option value="">No repositories available</option>
+                  ) : (
+                    availableRepositories.map((repo) => (
+                      <option key={repo.id} value={repo.id}>
+                        {repo.displayName}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  You can set up mirrored third party repositories on the settings page.
+                </p>
+              </div>
+
+              {addMutation.error && (
+                <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
+                  <p className="text-red-400 text-sm">
+                    {(addMutation.error as Error).message}
+                  </p>
+                </div>
+              )}
+
+              {addMutation.data && (
+                <div className="bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-slate-200 text-sm mb-2">{addMutation.data.message}</p>
+                  <div className="space-y-1 text-xs">
+                    {addMutation.data.results.map((result, idx) => (
+                      <div key={idx} className={result.success ? 'text-green-400' : 'text-red-400'}>
+                        {result.package}: {result.success
+                          ? `✓ ${result.versions} version(s) stored`
+                          : `✗ ${result.error}`}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Upload mode */}
+              <div>
+                <label className="label">Package Archive (ZIP)</label>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    isDragging
+                      ? 'border-primary-500 bg-primary-500/10'
+                      : 'border-slate-700 hover:border-slate-600'
+                  }`}
+                >
+                  <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  {selectedFile ? (
+                    <div>
+                      <p className="text-slate-200 font-medium mb-1">{selectedFile.name}</p>
+                      <p className="text-slate-400 text-sm mb-4">
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFile(null)}
+                        className="text-primary-400 hover:text-primary-300 text-sm"
+                      >
+                        Choose different file
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-slate-200 mb-2">
+                        Drag and drop a ZIP file here, or click to browse
+                      </p>
+                      <input
+                        type="file"
+                        accept=".zip"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        id="file-upload"
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="inline-block px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer text-sm"
+                      >
+                        Browse Files
+                      </label>
+                      <p className="text-slate-500 text-xs mt-2">
+                        Maximum file size: 100MB
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  The ZIP archive must contain a valid composer.json file in the root or first-level directory.
+                </p>
+              </div>
+
+              {uploadMutation.error && (
+                <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
+                  <p className="text-red-400 text-sm whitespace-pre-wrap">
+                    {(uploadMutation.error as Error).message}
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           <div className="flex justify-end gap-3 pt-4">
@@ -496,9 +711,15 @@ function AddPackagesModal({ onClose }: { onClose: () => void }) {
             <button
               type="submit"
               className="btn-primary"
-              disabled={addMutation.isPending || availableRepositories.length === 0}
+              disabled={
+                mode === 'fetch'
+                  ? addMutation.isPending || availableRepositories.length === 0
+                  : uploadMutation.isPending || !selectedFile
+              }
             >
-              {addMutation.isPending ? 'Adding...' : 'Add'}
+              {mode === 'fetch'
+                ? addMutation.isPending ? 'Adding...' : 'Add'
+                : uploadMutation.isPending ? 'Uploading...' : 'Upload'}
             </button>
           </div>
         </form>

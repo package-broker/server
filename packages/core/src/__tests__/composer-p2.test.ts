@@ -39,6 +39,7 @@ function createMockPackage(
     released_at: metadata.time ? Math.floor(new Date(metadata.time).getTime() / 1000) : null,
     readme_content: null,
     metadata: JSON.stringify(metadata), // Store complete metadata
+    is_manual_upload: 0,
     created_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
