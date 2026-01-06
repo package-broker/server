@@ -536,6 +536,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 c.executionCtx.waitUntil(
                   db.insert(artifacts)
                     .values({ ...artifactData, download_count: 0 })
+                    .onConflictDoNothing()
                     .catch(() => { })
                 );
                 // Update local artifact var so download count tracking works
@@ -862,7 +863,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 size: totalSize,
                 download_count: 0,
                 created_at: now,
-              });
+              }).onConflictDoNothing();
               // Update local artifact for download count
               artifact = {
                 id: artifactId,
