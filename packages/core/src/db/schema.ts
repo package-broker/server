@@ -91,11 +91,13 @@ export const packages = sqliteTable(
     released_at: integer('released_at'),
     readme_content: text('readme_content'),
     metadata: text('metadata'), // Complete upstream package metadata as JSON
+    is_manual_upload: integer('is_manual_upload').default(0).notNull(), // Flag for manually uploaded packages
     created_at: integer('created_at').notNull(),
   },
   (table) => ({
     repoIdIdx: index('idx_packages_repo_id').on(table.repo_id),
     nameIdx: index('idx_packages_name').on(table.name),
+    manualUploadIdx: index('idx_packages_manual_upload').on(table.is_manual_upload),
     // Unique constraint to prevent duplicate package+version entries
     uniquePackageVersionIdx: unique('packages_name_version_unique').on(table.name, table.version),
   })

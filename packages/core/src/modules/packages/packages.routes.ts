@@ -166,3 +166,74 @@ export const getPackageChangelogRouteDef = createRoute({
   },
   tags: ['Packages'],
 });
+
+export const uploadPackageRouteDef = createRoute({
+  method: 'post',
+  path: '/upload',
+  summary: 'Upload package',
+  description: 'Upload a package archive (zip) with composer.json metadata',
+  security: [{ Bearer: [] }],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({
+            file: z
+              .instanceof(File)
+              .openapi({
+                type: 'string',
+                format: 'binary',
+              }),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            message: z.string(),
+            package: z.object({
+              id: z.string(),
+              name: z.string(),
+              version: z.string(),
+              description: z.string().nullable(),
+            }),
+          }),
+        },
+      },
+      description: 'Package uploaded successfully',
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+            message: z.string(),
+            details: z.array(z.string()).optional(),
+          }),
+        },
+      },
+      description: 'Invalid package archive or metadata',
+    },
+    409: {
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+      description: 'Package version already exists',
+    },
+    413: {
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+      description: 'Package archive too large',
+    },
+  },
+  tags: ['Packages'],
+});
