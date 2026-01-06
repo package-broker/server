@@ -305,20 +305,32 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Dynamic credential fields */}
-          {credentialFields.map((field) => (
-            <div key={field.name}>
-              <label className="label">{field.label}</label>
-              <input
-                type={field.type}
-                value={credentials[field.name] || ''}
-                onChange={(e) =>
-                  setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
-                }
-                className="input w-full"
-                required
-              />
+          {credentialType === 'none' ? (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <p className="text-sm text-slate-300">
+                <strong className="text-slate-200">Public Repository</strong>
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                No authentication required. Packages will be synced on-demand when requested via Composer.
+                {sourceType === 'git' && ' Make sure the repository is publicly accessible.'}
+              </p>
             </div>
-          ))}
+          ) : (
+            credentialFields.map((field) => (
+              <div key={field.name}>
+                <label className="label">{field.label}</label>
+                <input
+                  type={field.type}
+                  value={credentials[field.name] || ''}
+                  onChange={(e) =>
+                    setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
+                  }
+                  className="input w-full"
+                  required
+                />
+              </div>
+            ))
+          )}
 
           {sourceType === 'git' && (
             <div>
@@ -501,25 +513,37 @@ function EditRepositoryModal({ repository, onClose }: { repository: Repository; 
           </div>
 
           {/* Dynamic credential fields */}
-          <div className="space-y-4">
-            <p className="text-xs text-slate-500">
-              Leave credential fields empty to keep current values.
-            </p>
-            {credentialFields.map((field) => (
-              <div key={field.name}>
-                <label className="label">{field.label}</label>
-                <input
-                  type={field.type}
-                  value={credentials[field.name] || ''}
-                  onChange={(e) =>
-                    setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
-                  }
-                  placeholder="Leave empty to keep current"
-                  className="input w-full"
-                />
-              </div>
-            ))}
-          </div>
+          {credentialType === 'none' ? (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <p className="text-sm text-slate-300">
+                <strong className="text-slate-200">Public Repository</strong>
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                No authentication required. Packages will be synced on-demand when requested via Composer.
+                {sourceType === 'git' && ' Make sure the repository is publicly accessible.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500">
+                Leave credential fields empty to keep current values.
+              </p>
+              {credentialFields.map((field) => (
+                <div key={field.name}>
+                  <label className="label">{field.label}</label>
+                  <input
+                    type={field.type}
+                    value={credentials[field.name] || ''}
+                    onChange={(e) =>
+                      setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
+                    }
+                    placeholder="Leave empty to keep current"
+                    className="input w-full"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {sourceType === 'git' && (
             <div>
