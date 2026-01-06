@@ -854,10 +854,30 @@ export async function uploadPackage(c: OpenAPIContext<PackagesRouteEnv>): Promis
   // Convert file to Uint8Array
   const arrayBuffer = await file.arrayBuffer();
   const archiveData = new Uint8Array(arrayBuffer);
+  
+  // Comprehensive debug logging
+  const firstBytes = Array.from(archiveData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  logger.info('Package upload received', { 
+    fileName: file.name, 
+    fileSize: file.size, 
+    fileType: file.type,
+    arrayBufferSize: arrayBuffer.byteLength,
+    archiveDataSize: archiveData.length,
+    firstBytes,
+    isValidZipMagic: archiveData[0] === 0x50 && archiveData[1] === 0x4B,
+  });
 
   // Validate package archive and extract composer.json
   const { validatePackageArchive, extractReadme: extractReadmeFromValidator } = await import('../../utils/package-validator.js');
   const validation = await validatePackageArchive(archiveData);
+  
+  // Log validation result for debugging
+  if (!validation.success) {
+    logger.warn('Package validation failed', {
+      fileName: file.name,
+      errors: validation.errors,
+    });
+  }
 
   if (!validation.success || !validation.metadata) {
     return c.json(

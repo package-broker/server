@@ -121,50 +121,78 @@ export async function validatePackageArchive(
   try {
     files = unzipSync(archiveData);
   } catch (error) {
+    console.error(`[package-validator] Failed to extract ZIP:`, error);
     return {
       success: false,
       errors: [`Failed to extract ZIP archive: ${error instanceof Error ? error.message : 'Unknown error'}`],
     };
   }
 
-  // Find composer.json file
-  // Look in root or first-level directory (common patterns)
-  let composerJsonContent: string | null = null;
-  let composerJsonPath: string | null = null;
+  // Find composer.json file using direct path lookup (much faster than iteration)
+  // This approach finds composer.json regardless of how many files are in the archive
+  const allPaths = Object.keys(files);
+  console.log(`[package-validator] Archive contains ${allPaths.length} files`);
   
-  const MAX_FILES_TO_CHECK = 100; // Limit to prevent DoS
-  let filesChecked = 0;
+  // Find all composer.json files in the archive (case-insensitive)
+  const composerJsonPaths = allPaths.filter(p => {
+    const pathLower = p.toLowerCase();
+    // Match: composer.json, */composer.json, or */*/composer.json
+    return pathLower === 'composer.json' ||
+           /^[^/]+\/composer\.json$/.test(pathLower) ||
+           /^[^/]+\/[^/]+\/composer\.json$/.test(pathLower);
+  });
 
-  for (const [path, content] of Object.entries(files)) {
-    filesChecked++;
-    if (filesChecked > MAX_FILES_TO_CHECK) {
-      break;
+  console.log(`[package-validator] Found ${composerJsonPaths.length} composer.json file(s):`, composerJsonPaths);
+
+  if (composerJsonPaths.length === 0) {
+    // Debug: show first 20 paths to help troubleshoot
+    console.log(`[package-validator] First 20 paths in archive:`, allPaths.slice(0, 20));
+    
+    // Also check if there's a composer.json at any depth (for better error message)
+    const deepComposerPaths = allPaths.filter(p => p.toLowerCase().endsWith('/composer.json') || p.toLowerCase() === 'composer.json');
+    if (deepComposerPaths.length > 0) {
+      console.log(`[package-validator] Found composer.json at unsupported depth:`, deepComposerPaths);
+      return {
+        success: false,
+        errors: [`composer.json found but too deep in directory structure: ${deepComposerPaths[0]} (max 2 levels)`],
+      };
     }
-
-    // Match: composer.json, */composer.json (one level deep)
-    const pathLower = path.toLowerCase();
-    if (pathLower === 'composer.json' || pathLower.match(/^[^/]+\/composer\.json$/)) {
-      // Check file size (max 1MB for composer.json)
-      const MAX_COMPOSER_JSON_SIZE = 1024 * 1024; // 1MB
-      if (content.length > MAX_COMPOSER_JSON_SIZE) {
-        errors.push(`composer.json too large: ${Math.round(content.length / 1024)}KB (max 1MB)`);
-        continue;
-      }
-
-      try {
-        composerJsonContent = strFromU8(content);
-        composerJsonPath = path;
-        break;
-      } catch (error) {
-        errors.push(`Failed to read ${path}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-  }
-
-  if (!composerJsonContent) {
+    
     return {
       success: false,
-      errors: ['composer.json not found in archive root or first-level directory'],
+      errors: [`composer.json not found in archive (${allPaths.length} files, searched root and up to 2 levels deep)`],
+    };
+  }
+
+  // Sort by depth (prefer shallower paths) and pick the first one
+  // Depth 0: composer.json, Depth 1: dir/composer.json, Depth 2: dir/subdir/composer.json
+  const sortedPaths = composerJsonPaths.sort((a, b) => {
+    const depthA = (a.match(/\//g) || []).length;
+    const depthB = (b.match(/\//g) || []).length;
+    return depthA - depthB;
+  });
+
+  const composerJsonPath = sortedPaths[0];
+  const content = files[composerJsonPath];
+  
+  console.log(`[package-validator] Using composer.json at: ${composerJsonPath}`);
+
+  // Check file size (max 1MB for composer.json)
+  const MAX_COMPOSER_JSON_SIZE = 1024 * 1024; // 1MB
+  if (content.length > MAX_COMPOSER_JSON_SIZE) {
+    return {
+      success: false,
+      errors: [`composer.json too large: ${Math.round(content.length / 1024)}KB (max 1MB)`],
+    };
+  }
+
+  let composerJsonContent: string;
+  try {
+    composerJsonContent = strFromU8(content);
+  } catch (error) {
+    return {
+      success: false,
+      errors: [`Failed to read ${composerJsonPath}: ${error instanceof Error ? error.message : 'Unknown error'}`],
     };
   }
 
