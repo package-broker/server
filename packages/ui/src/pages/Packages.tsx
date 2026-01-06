@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
-import { Package as PackageIcon, X, Upload, Package2 } from 'lucide-react';
+import { Package as PackageIcon, X, Upload, Package2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import semver from 'semver';
 import { getPackages, type Package, getRepositories, getSettings, addPackagesFromMirror, uploadPackage, deletePackageVersion, type Repository } from '../lib/api';
+import { useDebounce } from '../hooks/useDebounce';
 
 const STORAGE_KEY = 'composer_proxy_admin_token';
 
@@ -79,17 +80,32 @@ function DownloadButton({ distUrl }: { distUrl: string }) {
   );
 }
 
+const ITEMS_PER_PAGE = 20;
+
 export function Packages() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  /* const shouldFetch = search.length >= 3; */
+  // Debounce search input by 500ms
+  const debouncedSearch = useDebounce(search, 500);
 
-  const { data: packages = [], isLoading } = useQuery({
-    queryKey: ['packages', search],
-    queryFn: () => getPackages(search || undefined),
-    // enabled: shouldFetch,
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['packages', debouncedSearch, page],
+    queryFn: () => getPackages({ 
+      search: debouncedSearch || undefined, 
+      page, 
+      limit: ITEMS_PER_PAGE 
+    }),
   });
+
+  const packages = data?.data ?? [];
+  const pagination = data?.pagination ?? { page: 1, limit: ITEMS_PER_PAGE, total: 0, totalPages: 0 };
 
   // Group packages by name
   const groupedPackages = packages.reduce(
@@ -103,6 +119,18 @@ export function Packages() {
     {} as Record<string, Package[]>
   );
 
+  const handlePreviousPage = () => {
+    if (page > 1) {
+      setPage(page - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (page < pagination.totalPages) {
+      setPage(page + 1);
+    }
+  };
+
   return (
     <div className="space-y-8" data-testid="packages-page">
       <div className="flex items-center justify-between">
@@ -111,7 +139,7 @@ export function Packages() {
           <p className="text-slate-400">Browse cached packages</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-72">
+          <div className="w-72 relative">
             <input
               type="text"
               value={search}
@@ -121,6 +149,12 @@ export function Packages() {
               data-testid="package-search-input"
               aria-label="Search packages"
             />
+            {/* Show loading indicator when search is being debounced */}
+            {search !== debouncedSearch && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="w-4 h-4 border-2 border-slate-600 border-t-primary-500 rounded-full animate-spin" />
+              </div>
+            )}
           </div>
           <button
             onClick={() => setShowAddModal(true)}
@@ -145,9 +179,43 @@ export function Packages() {
             No packages found matching your search.
           </div>
         ) : (
-          Object.entries(groupedPackages).map(([name, versions]) => (
-            <PackageCard key={name} name={name} versions={versions} />
-          ))
+          <>
+            {Object.entries(groupedPackages).map(([name, versions]) => (
+              <PackageCard key={name} name={name} versions={versions} />
+            ))}
+
+            {/* Pagination Controls */}
+            {pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+                <div className="text-sm text-slate-400">
+                  Showing {((page - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(page * ITEMS_PER_PAGE, pagination.total)} of {pagination.total} packages
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePreviousPage}
+                    disabled={page === 1 || isFetching}
+                    className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Previous page"
+                    data-testid="pagination-prev"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-slate-300" />
+                  </button>
+                  <span className="px-4 py-2 text-sm text-slate-300">
+                    Page {page} of {pagination.totalPages}
+                  </span>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={page === pagination.totalPages || isFetching}
+                    className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Next page"
+                    data-testid="pagination-next"
+                  >
+                    <ChevronRight className="w-5 h-5 text-slate-300" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

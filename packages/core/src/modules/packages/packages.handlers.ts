@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import type { OpenAPIContext } from '../../routes/api/types';
 import type { DatabasePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
-import { eq, like, and } from 'drizzle-orm';
+import { eq, like, and, sql, count } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
 import type { StorageDriver } from '../../storage/driver';
 import { buildStorageKey, buildReadmeStorageKey, buildChangelogStorageKey } from '../../storage/driver';
@@ -29,25 +29,51 @@ export interface PackagesRouteEnv {
 
 /**
  * GET /api/packages
- * List all packages (with optional search)
+ * List all packages with optional search and pagination
  */
-export async function listPackages(c: OpenAPIContext<PackagesRouteEnv, any, any, { search?: string }>): Promise<Response> {
+export async function listPackages(c: OpenAPIContext<PackagesRouteEnv, any, any, { search?: string; page?: number; limit?: number }>): Promise<Response> {
   const db = c.get('database');
   const query = c.req.valid('query');
   const search = query?.search;
+  const page = query?.page ?? 1;
+  const limit = query?.limit ?? 20;
+  const offset = (page - 1) * limit;
 
-  let allPackages;
-  if (search) {
-    allPackages = await db
-      .select()
-      .from(packages)
-      .where(like(packages.name, `%${search}%`))
-      .orderBy(packages.name);
-  } else {
-    allPackages = await db.select().from(packages).orderBy(packages.name);
+  // Build where clause
+  const whereClause = search ? like(packages.name, `%${search}%`) : undefined;
+
+  // Get total count
+  const [countResult] = await db
+    .select({ count: count() })
+    .from(packages)
+    .where(whereClause);
+
+  const total = countResult?.count ?? 0;
+  const totalPages = Math.ceil(total / limit);
+
+  // Get paginated results
+  let query_builder = db
+    .select()
+    .from(packages)
+    .orderBy(packages.name)
+    .limit(limit)
+    .offset(offset);
+
+  if (whereClause) {
+    query_builder = query_builder.where(whereClause) as typeof query_builder;
   }
 
-  return c.json(allPackages);
+  const data = await query_builder;
+
+  return c.json({
+    data,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+    },
+  });
 }
 
 /**

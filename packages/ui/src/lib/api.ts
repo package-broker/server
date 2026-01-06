@@ -192,9 +192,24 @@ export interface Package {
   created_at: number;
 }
 
-export async function getPackages(search?: string) {
-  const params = search ? `?search=${encodeURIComponent(search)}` : '';
-  return fetchApi<Package[]>(`/packages${params}`);
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export async function getPackages(params?: { search?: string; page?: number; limit?: number }) {
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
+
+  const query = searchParams.toString();
+  return fetchApi<PaginatedResponse<Package>>(`/packages${query ? `?${query}` : ''}`);
 }
 
 export async function getPackage(name: string) {

@@ -6,7 +6,7 @@
 
 import { createRoute, z } from '@hono/zod-openapi';
 import {
-  packageListResponseSchema,
+  paginatedPackageListResponseSchema,
   packageWithVersionsResponseSchema,
   errorResponseSchema,
 } from '@package-broker/shared';
@@ -16,7 +16,7 @@ export const listPackagesRouteDef = createRoute({
   method: 'get',
   path: '/',
   summary: 'List packages',
-  description: 'List all packages with optional search',
+  description: 'List all packages with optional search and pagination',
   security: [{ Bearer: [] }],
   request: {
     query: z.object({
@@ -29,16 +29,39 @@ export const listPackagesRouteDef = createRoute({
           },
         })
         .optional(),
+      page: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .default(1)
+        .openapi({
+          param: {
+            name: 'page',
+            in: 'query',
+          },
+        }),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .default(20)
+        .openapi({
+          param: {
+            name: 'limit',
+            in: 'query',
+          },
+        }),
     }),
   },
   responses: {
     200: {
       content: {
         'application/json': {
-          schema: packageListResponseSchema,
+          schema: paginatedPackageListResponseSchema,
         },
       },
-      description: 'List of packages',
+      description: 'Paginated list of packages',
     },
   },
   tags: ['Packages'],
