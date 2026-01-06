@@ -374,7 +374,7 @@ export async function getPackageReadme(c: OpenAPIContext<PackagesRouteEnv>): Pro
         // Continue - we can still extract README from zipData
       }
 
-      // Create artifact record
+      // Create artifact record (ignore if already exists from concurrent request)
       const artifactId = nanoid();
       const now = Math.floor(Date.now() / 1000);
       try {
@@ -387,7 +387,7 @@ export async function getPackageReadme(c: OpenAPIContext<PackagesRouteEnv>): Pro
           size: totalSize,
           download_count: 0,
           created_at: now,
-        });
+        }).onConflictDoNothing();
         artifact = {
           id: artifactId,
           repo_id: pkg.repo_id,
@@ -657,7 +657,7 @@ export async function getPackageChangelog(c: OpenAPIContext<PackagesRouteEnv>): 
         // Continue - we can still extract CHANGELOG from zipData
       }
 
-      // Create artifact record
+      // Create artifact record (ignore if already exists from concurrent request)
       const artifactId = nanoid();
       const now = Math.floor(Date.now() / 1000);
       try {
@@ -670,7 +670,7 @@ export async function getPackageChangelog(c: OpenAPIContext<PackagesRouteEnv>): 
           size: totalSize,
           download_count: 0,
           created_at: now,
-        });
+        }).onConflictDoNothing();
         artifact = {
           id: artifactId,
           repo_id: pkg.repo_id,
@@ -1018,7 +1018,7 @@ export async function uploadPackage(c: OpenAPIContext<PackagesRouteEnv>): Promis
     );
   }
 
-  // Create artifact record
+  // Create artifact record (ignore if already exists from concurrent request)
   const artifactId = nanoid();
   try {
     await db.insert(artifacts).values({
@@ -1031,7 +1031,7 @@ export async function uploadPackage(c: OpenAPIContext<PackagesRouteEnv>): Promis
       download_count: 0,
       created_at: now,
       last_downloaded_at: null,
-    });
+    }).onConflictDoNothing();
   } catch (error) {
     logger.error('Failed to create artifact record', { name, version }, error instanceof Error ? error : new Error(String(error)));
     // Continue - package is stored, artifact record is optional
