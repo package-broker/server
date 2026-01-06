@@ -320,6 +320,12 @@ async function validateRepositoryCredentials(
   encryptionKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Handle GitHub repositories differently
+    if (repo.vcs_type === 'git') {
+      return validateGitHubRepository(repo, encryptionKey);
+    }
+
+    // Composer repository validation (existing logic)
     const credentialsJson = await decryptCredentials(repo.auth_credentials, encryptionKey);
     const credentials = JSON.parse(credentialsJson);
 
@@ -356,6 +362,86 @@ async function validateRepositoryCredentials(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error during validation',
+    };
+  }
+}
+
+/**
+ * Validate a GitHub repository by checking access to the repo and composer.json
+ */
+async function validateGitHubRepository(
+  repo: typeof repositories.$inferSelect,
+  encryptionKey: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Parse GitHub URL to get owner and repo name
+    const urlMatch = repo.url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+    if (!urlMatch) {
+      return { success: false, error: 'Invalid GitHub URL format. Expected: https://github.com/owner/repo' };
+    }
+    const [, owner, repoName] = urlMatch;
+    const cleanRepoName = repoName.replace('.git', '');
+
+    // Build headers for GitHub API
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'PackageBroker/1.0',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+
+    // Add auth header if credentials are provided
+    if (repo.credential_type !== 'none') {
+      const credentialsJson = await decryptCredentials(repo.auth_credentials, encryptionKey);
+      const credentials = JSON.parse(credentialsJson);
+      const token = credentials.token || credentials.password || '';
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    // Check if repository exists and is accessible
+    const repoApiUrl = `https://api.github.com/repos/${owner}/${cleanRepoName}`;
+    const repoResponse = await fetch(repoApiUrl, { headers });
+
+    if (repoResponse.status === 401) {
+      return { success: false, error: 'GitHub authentication failed. Please check your token.' };
+    }
+    if (repoResponse.status === 403) {
+      const remaining = repoResponse.headers.get('X-RateLimit-Remaining');
+      if (remaining === '0') {
+        return { success: false, error: 'GitHub API rate limit exceeded. Try again later or add authentication.' };
+      }
+      return { success: false, error: 'Access forbidden. Check your token permissions.' };
+    }
+    if (repoResponse.status === 404) {
+      return { success: false, error: `Repository not found: ${owner}/${cleanRepoName}. Check URL or permissions.` };
+    }
+    if (!repoResponse.ok) {
+      return { success: false, error: `GitHub API error: HTTP ${repoResponse.status}` };
+    }
+
+    // Check for composer.json in the repository
+    const composerJsonPath = repo.composer_json_path || 'composer.json';
+    const contentsUrl = `https://api.github.com/repos/${owner}/${cleanRepoName}/contents/${composerJsonPath}`;
+    const contentsResponse = await fetch(contentsUrl, { headers });
+
+    if (contentsResponse.status === 404) {
+      return { 
+        success: false, 
+        error: `composer.json not found at path: ${composerJsonPath}. This repository may not be a Composer package.` 
+      };
+    }
+    if (!contentsResponse.ok) {
+      // Don't fail if we can't check composer.json - the repo itself is valid
+      console.warn(`Could not verify composer.json: HTTP ${contentsResponse.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('GitHub repository validation error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error during GitHub validation',
     };
   }
 }
