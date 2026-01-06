@@ -212,7 +212,9 @@ export async function validatePackageArchive(
     errors.push('Missing required field: "name"');
   } else {
     // Validate name format (vendor/package)
-    const namePattern = /^[a-z0-9]([_.-]?[a-z0-9]+)*\/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$/i;
+    // Using a simpler, non-backtracking pattern to avoid ReDoS vulnerability
+    // Matches: starts with alphanumeric, followed by alphanumerics/underscores/dots/dashes
+    const namePattern = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i;
     if (!namePattern.test(metadata.name)) {
       errors.push(`Invalid package name format: "${metadata.name}" (must be vendor/package)`);
     }
