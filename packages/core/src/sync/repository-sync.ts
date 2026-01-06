@@ -257,23 +257,27 @@ async function storePackages(
         version: pkg.version,
         dist_url: proxyDistUrl,
         source_dist_url: sourceDistUrl,
+        dist_reference: pkg.dist?.reference || null,
         description: pkg.description || null,
         license: pkg.license ? JSON.stringify(pkg.license) : null,
         package_type: pkg.type || null,
         homepage: pkg.homepage || null,
         released_at: releasedAt,
         readme_content: pkg.readme || null,
+        metadata: pkg.rawMetadata ? JSON.stringify(pkg.rawMetadata) : null,
         created_at: firstSeenAt,
       }).onConflictDoUpdate({
         target: [packagesTable.name, packagesTable.version],
         set: {
           dist_url: proxyDistUrl,
           source_dist_url: sourceDistUrl,
+          dist_reference: pkg.dist?.reference || null,
           description: pkg.description || null,
           license: pkg.license ? JSON.stringify(pkg.license) : null,
           package_type: pkg.type || null,
           homepage: pkg.homepage || null,
           released_at: releasedAt,
+          metadata: pkg.rawMetadata ? JSON.stringify(pkg.rawMetadata) : null,
         },
       });
     } catch (error) {

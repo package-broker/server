@@ -350,7 +350,7 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
           const headers = new Headers();
           headers.set('Content-Type', 'application/json');
           headers.set('Last-Modified', new Date().toUTCString());
-          headers.set('Cache-Control', 'public, max-age=3600');
+          headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
           headers.set('X-Cache', 'MISS-UPSTREAM');
 
           return new Response(JSON.stringify(transformedData), { status: 200, headers });
@@ -997,11 +997,18 @@ function transformDistUrlsInMemory(
       // Use existing reference or generate simple one (no expensive crypto)
       const distReference = metadata.dist?.reference || `${pkgName.replace('/', '-')}-${version}`.substring(0, 40);
 
-      // Build transformed version
+      // Get or derive the normalized version
+      const normalizedVersion: string | undefined =
+        typeof metadata.version_normalized === 'string'
+          ? metadata.version_normalized
+          : deriveVersionNormalized(version);
+
+      // Build transformed version with original display version
       const versionData: any = {
         ...metadata,
         name: pkgName,
         version,
+        ...(normalizedVersion ? { version_normalized: normalizedVersion } : {}),
         dist: {
           ...metadata.dist,
           type: metadata.dist?.type || 'zip',
@@ -1019,6 +1026,16 @@ function transformDistUrlsInMemory(
 
       // Push to array (Composer 2 p2 format)
       result.packages[pkgName].push(versionData);
+
+      // Add normalized version alias if different from display version
+      // This allows constraints like "== 7.17.3.0" to match "v7.17.3"
+      if (normalizedVersion && normalizedVersion !== version) {
+        result.packages[pkgName].push({
+          ...versionData,
+          version: normalizedVersion,
+          version_normalized: normalizedVersion,
+        });
+      }
     }
   }
 
