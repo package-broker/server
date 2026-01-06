@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Package as PackageIcon, X, Upload, Package2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import semver from 'semver';
@@ -166,7 +166,7 @@ export function Packages() {
         </div>
       </div>
 
-      {showAddModal && <AddPackagesModal onClose={() => setShowAddModal(false)} />}
+      {showAddModal && <AddPackagesModal onClose={() => setShowAddModal(false)} onSuccess={(packageName) => setSearch(packageName)} />}
 
       {/* Packages List */}
       <div className="space-y-4" data-testid="packages-list">
@@ -456,7 +456,7 @@ function PackageCard({ name, versions }: { name: string; versions: Package[] }) 
   );
 }
 
-function AddPackagesModal({ onClose }: { onClose: () => void }) {
+function AddPackagesModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (packageName: string) => void }) {
   const [mode, setMode] = useState<'fetch' | 'upload'>('fetch');
   const [packageNames, setPackageNames] = useState('');
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string>('');
@@ -524,9 +524,16 @@ function AddPackagesModal({ onClose }: { onClose: () => void }) {
   const addMutation = useMutation({
     mutationFn: (data: { repositoryId: string; packageNames: string[] }) =>
       addPackagesFromMirror(data.repositoryId, data.packageNames),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
-      onClose();
+      
+      if (data.summary.failed === 0 && data.summary.succeeded > 0) {
+        const firstSuccess = data.results.find(r => r.success);
+        if (firstSuccess) {
+          onSuccess(firstSuccess.package);
+        }
+        onClose();
+      }
     },
   });
 
@@ -688,9 +695,11 @@ function AddPackagesModal({ onClose }: { onClose: () => void }) {
                 </div>
               )}
 
-              {addMutation.data && (
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <p className="text-slate-200 text-sm mb-2">{addMutation.data.message}</p>
+              {addMutation.data && addMutation.data.summary.failed > 0 && (
+                <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4">
+                  <p className="text-red-400 text-sm font-medium mb-2">
+                    {addMutation.data.summary.failed} of {addMutation.data.summary.total} package(s) failed
+                  </p>
                   <div className="space-y-1 text-xs">
                     {addMutation.data.results.map((result, idx) => (
                       <div key={idx} className={result.success ? 'text-green-400' : 'text-red-400'}>

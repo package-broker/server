@@ -837,7 +837,19 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
     }
   }
 
-  return c.json({ results });
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.filter(r => !r.success).length;
+  const totalVersions = results.reduce((sum, r) => sum + (r.versions || 0), 0);
+
+  return c.json({
+    results,
+    summary: {
+      total: results.length,
+      succeeded,
+      failed,
+      total_versions: totalVersions,
+    },
+  });
 }
 
 /**
