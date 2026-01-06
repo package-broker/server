@@ -475,11 +475,13 @@ function AddPackagesModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     queryFn: getSettings,
   });
 
-  // Filter to composer and git repositories (active only), and add Packagist if enabled
+  // Filter to composer and git repositories, and add Packagist if enabled
+  // Allow active, error, and pending repos - users may want to try fetching even if test failed
   const availableRepositories = useMemo(() => {
     // Include both composer and git (GitHub) repositories
     const mirrorableRepos = repositories.filter(
-      (repo) => (repo.vcs_type === 'composer' || repo.vcs_type === 'git') && repo.status === 'active'
+      (repo) => (repo.vcs_type === 'composer' || repo.vcs_type === 'git') && 
+                (repo.status === 'active' || repo.status === 'error' || repo.status === 'pending')
     );
 
     const repos: Array<Repository & { displayName: string }> = mirrorableRepos
