@@ -65,13 +65,35 @@ export class ApiMocker {
     await this.page.route('**/api/packages*', (route) => {
       const url = new URL(route.request().url());
       const search = url.searchParams.get('search');
+      const page = parseInt(url.searchParams.get('page') || '1', 10);
+      const limit = parseInt(url.searchParams.get('limit') || '20', 10);
 
+      let filtered = packages;
       if (search) {
-        const filtered = packages.filter((p) => p.name.includes(search));
-        route.fulfill({ json: filtered });
-      } else {
-        route.fulfill({ json: packages });
+        filtered = packages.filter((p) => p.name.includes(search));
       }
+
+      // Get unique package names for pagination
+      const uniqueNames = [...new Set(filtered.map(p => p.name))];
+      const total = uniqueNames.length;
+      const totalPages = Math.ceil(total / limit);
+      const offset = (page - 1) * limit;
+      const paginatedNames = uniqueNames.slice(offset, offset + limit);
+
+      // Get all versions for paginated package names
+      const data = filtered.filter(p => paginatedNames.includes(p.name));
+
+      route.fulfill({
+        json: {
+          data,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+          },
+        },
+      });
     });
   }
 

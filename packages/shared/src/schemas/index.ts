@@ -140,6 +140,21 @@ export const updatePackagistMirroringRequestSchema = z.object({
   enabled: z.boolean(),
 });
 
+// Pagination schema
+export const paginationSchema = z.object({
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  totalPages: z.number(),
+});
+
+export function paginatedResponseSchema<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.object({
+    data: z.array(itemSchema),
+    pagination: paginationSchema,
+  });
+}
+
 // Package schemas
 export const packageResponseSchema = z.object({
   id: z.string(),
@@ -153,6 +168,8 @@ export const packageResponseSchema = z.object({
 });
 
 export const packageListResponseSchema = z.array(packageResponseSchema);
+
+export const paginatedPackageListResponseSchema = paginatedResponseSchema(packageResponseSchema);
 
 export const packageWithVersionsResponseSchema = z.object({
   name: z.string(),
