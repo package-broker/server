@@ -14,6 +14,7 @@ import { nanoid } from 'nanoid';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { isPackagistMirroringEnabled } from '../../modules/admin';
 import { getLogger } from '../../utils/logger';
+import { fetchPackageFromUpstream, type UpstreamRepository } from '../../utils/upstream-fetch.js';
 
 export interface PackagesRouteEnv {
   Bindings: {
@@ -800,13 +801,55 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
       return c.json({ error: 'Bad Request', message: 'Repository is not active' }, 400);
     }
 
-    // TODO: Implement manual package addition for other composer repositories
-    // This requires fetching the package metadata from the source repository
-    // which is more complex than just fetching from Packagist
-    return c.json({ error: 'Not Implemented', message: 'Manual package addition is currently only supported for Packagist' }, 501);
+    const upstreamRepo: UpstreamRepository = {
+      id: repo.id,
+      url: repo.url,
+      vcs_type: repo.vcs_type,
+      credential_type: repo.credential_type,
+      auth_credentials: repo.auth_credentials,
+      package_filter: repo.package_filter,
+    };
+
+    for (const packageName of body.package_names) {
+      try {
+        const packageData = await fetchPackageFromUpstream(upstreamRepo, packageName, c.env.ENCRYPTION_KEY);
+
+        if (!packageData) {
+          results.push({ package: packageName, success: false, error: 'Package not found' });
+          continue;
+        }
+
+        const { transformPackageDistUrls } = await import('../composer');
+        const { storedCount, errors } = await transformPackageDistUrls(packageData, repo.id, baseUrl, db);
+
+        if (storedCount > 0) {
+          results.push({ package: packageName, success: true, versions: storedCount });
+        } else {
+          results.push({ package: packageName, success: false, error: errors.join('; ') || 'No versions stored' });
+        }
+      } catch (error) {
+        results.push({
+          package: packageName,
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
   }
 
-  return c.json({ results });
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.filter(r => !r.success).length;
+  const totalVersions = results.reduce((sum, r) => sum + (r.versions || 0), 0);
+
+  return c.json({
+    results,
+    summary: {
+      total: results.length,
+      succeeded,
+      failed,
+      total_versions: totalVersions,
+    },
+  });
 }
 
 /**
@@ -814,7 +857,5 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
  * Temporary utility to fix versioning issues
  */
 export async function cleanupNumericVersions(c: Context<PackagesRouteEnv>): Promise<Response> {
-  // Stub implementation to satisfy export requirements
-  // Real implementation would clean up numeric versions like x.y.z.0
   return c.json({ message: 'Cleanup not implemented in this adapter version' });
 }

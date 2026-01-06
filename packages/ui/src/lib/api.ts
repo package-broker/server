@@ -353,7 +353,6 @@ export interface AddPackagesFromMirrorResult {
 }
 
 export interface AddPackagesFromMirrorResponse {
-  message: string;
   results: AddPackagesFromMirrorResult[];
   summary: {
     total: number;
