@@ -1069,3 +1069,119 @@ export async function cleanupNumericVersions(c: Context<PackagesRouteEnv>): Prom
   // Real implementation would clean up numeric versions like x.y.z.0
   return c.json({ message: 'Cleanup not implemented in this adapter version' });
 }
+
+/**
+ * DELETE /api/packages/:name/:version
+ * Delete a specific package version
+ * Removes: package record, artifact record, and stored files (archive, README, changelog)
+ */
+export async function deletePackageVersion(c: OpenAPIContext<PackagesRouteEnv>): Promise<Response> {
+  const logger = getLogger();
+  const { name: nameParam, version } = c.req.valid('param');
+  const name = decodeURIComponent(nameParam);
+  
+  const db = c.get('database');
+  const storage = c.get('storage');
+
+  // Find the package version
+  const [pkg] = await db
+    .select()
+    .from(packages)
+    .where(and(eq(packages.name, name), eq(packages.version, version)))
+    .limit(1);
+
+  if (!pkg) {
+    return c.json(
+      {
+        error: 'Not Found',
+        message: `Package ${name}@${version} not found`,
+      },
+      404
+    );
+  }
+
+  let filesRemoved = 0;
+  const storageType = pkg.repo_id === 'packagist' ? 'public' : 'private';
+
+  // Find and delete artifact
+  const [artifact] = await db
+    .select()
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.repo_id, pkg.repo_id),
+        eq(artifacts.package_name, name),
+        eq(artifacts.version, version)
+      )
+    )
+    .limit(1);
+
+  if (artifact) {
+    // Delete archive file from storage
+    try {
+      await storage.delete(artifact.file_key);
+      filesRemoved++;
+      logger.info('Deleted package archive from storage', { name, version, key: artifact.file_key });
+    } catch (error) {
+      logger.warn('Failed to delete archive file', { 
+        name, 
+        version, 
+        key: artifact.file_key,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+
+    // Delete artifact record
+    try {
+      await db.delete(artifacts).where(eq(artifacts.id, artifact.id));
+    } catch (error) {
+      logger.warn('Failed to delete artifact record', { 
+        name, 
+        version,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  // Delete README from storage (best effort)
+  try {
+    const readmeKey = buildReadmeStorageKey(storageType, pkg.repo_id, name, version);
+    await storage.delete(readmeKey);
+    filesRemoved++;
+  } catch {
+    // README might not exist, ignore error
+  }
+
+  // Delete CHANGELOG from storage (best effort)
+  try {
+    const changelogKey = buildChangelogStorageKey(storageType, pkg.repo_id, name, version);
+    await storage.delete(changelogKey);
+    filesRemoved++;
+  } catch {
+    // CHANGELOG might not exist, ignore error
+  }
+
+  // Delete package record
+  try {
+    await db.delete(packages).where(eq(packages.id, pkg.id));
+    logger.info('Deleted package version', { name, version, packageId: pkg.id, filesRemoved });
+  } catch (error) {
+    logger.error('Failed to delete package record', { name, version }, error instanceof Error ? error : new Error(String(error)));
+    return c.json(
+      {
+        error: 'Internal Server Error',
+        message: 'Failed to delete package record',
+      },
+      500
+    );
+  }
+
+  return c.json({
+    message: `Package ${name}@${version} deleted successfully`,
+    deleted: {
+      name,
+      version,
+      filesRemoved,
+    },
+  });
+}

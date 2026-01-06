@@ -237,3 +237,55 @@ export const uploadPackageRouteDef = createRoute({
   },
   tags: ['Packages'],
 });
+
+export const deletePackageVersionRouteDef = createRoute({
+  method: 'delete',
+  path: '/{name}/{version}',
+  summary: 'Delete package version',
+  description: 'Delete a specific package version. Removes the package record, artifact, and stored files.',
+  security: [{ Bearer: [] }],
+  request: {
+    params: z.object({
+      name: z.string().openapi({
+        param: {
+          name: 'name',
+          in: 'path',
+        },
+        description: 'Package name (e.g., vendor/package)',
+      }),
+      version: z.string().openapi({
+        param: {
+          name: 'version',
+          in: 'path',
+        },
+        description: 'Package version to delete',
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            message: z.string(),
+            deleted: z.object({
+              name: z.string(),
+              version: z.string(),
+              filesRemoved: z.number(),
+            }),
+          }),
+        },
+      },
+      description: 'Package version deleted successfully',
+    },
+    404: {
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+      description: 'Package version not found',
+    },
+  },
+  tags: ['Packages'],
+});

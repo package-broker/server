@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Package as PackageIcon, X, Upload, Package2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import semver from 'semver';
-import { getPackages, type Package, getRepositories, getSettings, addPackagesFromMirror, uploadPackage, type Repository } from '../lib/api';
+import { getPackages, type Package, getRepositories, getSettings, addPackagesFromMirror, uploadPackage, deletePackageVersion, type Repository } from '../lib/api';
 
 const STORAGE_KEY = 'composer_proxy_admin_token';
 
@@ -157,6 +157,17 @@ export function Packages() {
 function PackageCard({ name, versions }: { name: string; versions: Package[] }) {
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ packageName, version }: { packageName: string; version: string }) =>
+      deletePackageVersion(packageName, version),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setDeleteConfirm(null);
+    },
+  });
 
   // Sort versions by semantic version (highest first)
   const sortedVersions = useMemo(() => {
@@ -296,22 +307,67 @@ function PackageCard({ name, versions }: { name: string; versions: Package[] }) 
                 data-version={version.version}
                 role="listitem"
               >
-                <div>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="font-medium text-slate-200">{version.version}</span>
                   {version.released_at && (
-                    <span className="text-sm text-slate-500 ml-2" aria-label={`Released ${new Date(version.released_at * 1000).toLocaleDateString()}`}>
-                      Released {new Date(version.released_at * 1000).toLocaleDateString()}
+                    <span className="text-sm text-slate-500" aria-label={`Released ${new Date(version.released_at * 1000).toLocaleDateString()}`}>
+                      {new Date(version.released_at * 1000).toLocaleDateString()}
                     </span>
                   )}
                   {version.is_manual_upload === 1 && (
-                    <span className="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">
-                      Manual Upload
+                    <span className="px-2 py-0.5 text-xs bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded">
+                      📤 Manual
                     </span>
                   )}
                 </div>
-                <DownloadButton distUrl={version.dist_url} />
+                <div className="flex items-center gap-2">
+                  <DownloadButton distUrl={version.dist_url} />
+                  {deleteConfirm === version.version ? (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMutation.mutate({ packageName: name, version: version.version });
+                        }}
+                        disabled={deleteMutation.isPending}
+                        className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded disabled:opacity-50"
+                        title="Confirm delete"
+                      >
+                        {deleteMutation.isPending ? '...' : 'Delete'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirm(null);
+                        }}
+                        className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                        title="Cancel"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirm(version.version);
+                      }}
+                      className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                      title="Delete this version"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
+            {deleteMutation.isError && (
+              <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-sm text-red-400">
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete'}
+              </div>
+            )}
           </div>
           {hasMoreVersions && !showAll && (
             <button

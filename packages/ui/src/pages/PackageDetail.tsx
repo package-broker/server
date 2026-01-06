@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, Link, useLocation } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, Link, useLocation, useNavigate } from 'react-router';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import semver from 'semver';
-import { getPackage, getPackageReadme, getPackageChangelog, getPackageStats, type Package } from '../lib/api';
+import { getPackage, getPackageReadme, getPackageChangelog, getPackageStats, deletePackageVersion, type Package } from '../lib/api';
 
 const STORAGE_KEY = 'composer_proxy_admin_token';
 
@@ -114,6 +114,8 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 export function PackageDetail() {
   const { vendor, package: packageName } = useParams<{ vendor: string; package: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
   // Combine vendor and package name
   const fullPackageName = vendor && packageName ? `${vendor}/${packageName}` : null;
@@ -130,6 +132,7 @@ export function PackageDetail() {
   const [selectedVersion, setSelectedVersion] = useState<string | null>(getVersionFromHash());
   const [readmeExpanded, setReadmeExpanded] = useState(false);
   const [changelogExpanded, setChangelogExpanded] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null); // version to confirm delete
   
   // Update selectedVersion when hash changes
   useEffect(() => {
@@ -242,6 +245,29 @@ export function PackageDetail() {
     enabled: !!fullPackageName && !!currentVersion,
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: ({ name, version }: { name: string; version: string }) => 
+      deletePackageVersion(name, version),
+    onSuccess: (_, { version }) => {
+      // Invalidate package query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['package', fullPackageName] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setDeleteConfirm(null);
+      
+      // If we deleted the current version, switch to another or navigate away
+      if (currentVersion?.version === version) {
+        const remaining = sortedVersions.filter(v => v.version !== version);
+        if (remaining.length > 0) {
+          handleVersionChange(remaining[0].version);
+        } else {
+          // No versions left, go back to packages list
+          navigate('/packages');
+        }
+      }
+    },
+  });
+
   // Parse license
   const parseLicense = (license: string | null): string[] => {
     if (!license) return [];
@@ -302,10 +328,15 @@ export function PackageDetail() {
               >
                 {sortedVersions.map((v) => (
                   <option key={v.version} value={v.version}>
-                    {v.version}
+                    {v.version}{v.is_manual_upload ? ' (manual)' : ''}
                   </option>
                 ))}
               </select>
+              {currentVersion.is_manual_upload === 1 && (
+                <span className="px-2.5 py-1 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-full">
+                  📤 Manual Upload
+                </span>
+              )}
             </div>
             {currentVersion.description && (
               <p className="text-slate-300 text-lg">{currentVersion.description}</p>
@@ -548,26 +579,79 @@ export function PackageDetail() {
             </h3>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {sortedVersions.map((v) => (
-                <button
+                <div
                   key={v.version}
-                  onClick={() => handleVersionChange(v.version)}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  className={`px-3 py-2 rounded-lg transition-colors ${
                     (selectedVersion || currentVersion.version) === v.version
-                      ? 'bg-primary-500/20 text-primary-400'
-                      : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800'
+                      ? 'bg-primary-500/20'
+                      : 'bg-slate-800/50 hover:bg-slate-800'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{v.version}</span>
-                    {v.released_at && (
-                      <span className="text-xs text-slate-500">
-                        {new Date(v.released_at * 1000).toLocaleDateString()}
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => handleVersionChange(v.version)}
+                      className={`flex-1 text-left font-medium ${
+                        (selectedVersion || currentVersion.version) === v.version
+                          ? 'text-primary-400'
+                          : 'text-slate-300'
+                      }`}
+                    >
+                      {v.version}
+                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {v.is_manual_upload === 1 && (
+                        <span className="px-1.5 py-0.5 text-[10px] bg-blue-600/20 text-blue-400 rounded" title="Manually uploaded">
+                          📤
+                        </span>
+                      )}
+                      {v.released_at && (
+                        <span className="text-xs text-slate-500">
+                          {new Date(v.released_at * 1000).toLocaleDateString()}
+                        </span>
+                      )}
+                      {/* Delete button */}
+                      {deleteConfirm === v.version ? (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => deleteMutation.mutate({ name: fullPackageName!, version: v.version })}
+                            disabled={deleteMutation.isPending}
+                            className="px-2 py-0.5 text-xs bg-red-600 hover:bg-red-500 text-white rounded disabled:opacity-50"
+                            title="Confirm delete"
+                          >
+                            {deleteMutation.isPending ? '...' : '✓'}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-2 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(v.version);
+                          }}
+                          className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                          title="Delete this version"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
+            {deleteMutation.isError && (
+              <div className="mt-3 p-2 bg-red-500/10 border border-red-500/30 rounded text-sm text-red-400">
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete'}
+              </div>
+            )}
           </div>
 
         </div>

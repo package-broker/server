@@ -296,6 +296,22 @@ export async function getPackageStats(name: string, version: string): Promise<Pa
   return fetchApi<PackageStats>(`/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}/stats`);
 }
 
+export interface DeletePackageVersionResponse {
+  message: string;
+  deleted: {
+    name: string;
+    version: string;
+    filesRemoved: number;
+  };
+}
+
+export async function deletePackageVersion(name: string, version: string): Promise<DeletePackageVersionResponse> {
+  return fetchApi<DeletePackageVersionResponse>(
+    `/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    { method: 'DELETE' }
+  );
+}
+
 // Settings
 export interface Settings {
   kv_available: boolean;
