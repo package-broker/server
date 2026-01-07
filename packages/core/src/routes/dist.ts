@@ -9,7 +9,7 @@
 import type { Context } from 'hono';
 import type { DatabasePort } from '../ports';
 import { artifacts, packages, repositories } from '../db/schema';
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import type { StorageDriver } from '../storage/driver';
 import { buildStorageKey, buildReadmeStorageKey, buildChangelogStorageKey } from '../storage/driver';
 import { downloadFromSource } from '../utils/download';
@@ -20,6 +20,54 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
 import { type AuthContext } from '../middleware/auth';
+import { isPackagistMirroringEnabled } from '../modules/admin';
+import { matchesPackageFilter } from '../utils/repository-filter.js';
+
+/**
+ * Convert a normalized version back to possible original versions.
+ * Composer uses version_normalized in mirror URLs, but we store original versions.
+ * 
+ * Examples:
+ * - '103.0.7.0-patch8' → ['103.0.7-p8', '103.0.7.0-patch8']
+ * - '7.17.3.0' → ['7.17.3', 'v7.17.3', '7.17.3.0']
+ * - '1.33.0.0' → ['1.33.0', 'v1.33.0', '1.33.0.0']
+ */
+function denormalizeVersion(normalizedVersion: string): string[] {
+  const versions: string[] = [normalizedVersion];
+  
+  // Handle Magento patch format: 103.0.7.0-patch8 → 103.0.7-p8
+  const patchMatch = normalizedVersion.match(/^(\d+\.\d+\.\d+)\.0-patch(\d+)$/);
+  if (patchMatch) {
+    const [, base, patch] = patchMatch;
+    versions.push(`${base}-p${patch}`);
+    return versions;
+  }
+  
+  // Handle 4-part version with trailing .0: 7.17.3.0 → 7.17.3, v7.17.3
+  const fourPartMatch = normalizedVersion.match(/^(\d+\.\d+\.\d+)\.0$/);
+  if (fourPartMatch) {
+    const [, base] = fourPartMatch;
+    versions.push(base);
+    versions.push(`v${base}`);
+    return versions;
+  }
+  
+  // Handle simple version with trailing .0: 1.2.0 → 1.2, v1.2
+  const trailingZeroMatch = normalizedVersion.match(/^(\d+\.\d+)\.0$/);
+  if (trailingZeroMatch) {
+    const [, base] = trailingZeroMatch;
+    versions.push(base);
+    versions.push(`v${base}`);
+    return versions;
+  }
+  
+  // Add v-prefixed version as fallback
+  if (!normalizedVersion.startsWith('v')) {
+    versions.push(`v${normalizedVersion}`);
+  }
+  
+  return versions;
+}
 
 export interface DistRouteEnv {
   Bindings: {
@@ -165,53 +213,162 @@ async function extractAndStoreReadme(
 }
 
 /**
- * GET /dist/:repo_id/:vendor/:package/:version.zip
+ * GET /dists/:vendor/:package/:version/:reference (mirror URL format - Private Packagist style)
  * OR
- * GET /dist/:vendor/:package/:version/r:reference.zip (mirror URL format)
- * Serve cached artifact with streaming, Last-Modified headers, and conditional requests
+ * GET /dist/m/:vendor/:package/:version.zip (legacy mirror format)
+ * 
+ * Server resolves repository from package name - no repo ID in URL.
+ * Serve cached artifact with streaming, Last-Modified headers, and conditional requests.
  */
 export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
-  let repoId = c.req.param('repo_id');
-  let vendor = c.req.param('vendor');
-  let pkgParam = c.req.param('package');
-  let packageName: string;
+  const vendor = c.req.param('vendor');
+  const pkgParam = c.req.param('package');
   let version = c.req.param('version')?.replace('.zip', '') || '';
-  const reference = c.req.param('reference');
-
+  const reference = c.req.param('reference')?.replace('.zip', '');
+  
+  // Optional legacy route param (only present on /dist/:repo_id/:vendor/:package/:version)
+  const repoIdParam = c.req.param('repo_id');
+  
   const db = c.get('database');
 
-  // Handle mirror URL format: /dist/:package/:version/r:reference.zip
-  // In this case, repo_id and vendor/package split are not in the URL
-  if (!repoId && !vendor && pkgParam) {
-    const fullPackageName = pkgParam;
-    // Look up repo_id from package name
-    const [pkg] = await db
-      .select({ repo_id: packages.repo_id })
-      .from(packages)
-      .where(and(eq(packages.name, fullPackageName), eq(packages.version, version)))
-      .limit(1);
-
-    if (pkg) {
-      repoId = pkg.repo_id;
-      packageName = fullPackageName;
-      // Split package name into vendor/package for compatibility
-      const parts = fullPackageName.split('/');
-      if (parts.length === 2) {
-        vendor = parts[0];
-        pkgParam = parts[1];
-      } else {
-        return c.json({ error: 'Bad Request', message: 'Invalid package name format' }, 400);
-      }
-    } else {
-      return c.json({ error: 'Not Found', message: 'Package not found' }, 404);
-    }
-  } else {
-    // Standard format: /dist/:repo_id/:vendor/:package/:version
-    packageName = `${vendor}/${pkgParam}`;
+  if (!vendor || !pkgParam || !version) {
+    return c.json({ error: 'Bad Request', message: 'Missing required parameters' }, 400);
   }
 
-  if (!repoId || !packageName || !version) {
-    return c.json({ error: 'Bad Request', message: 'Missing required parameters' }, 400);
+  const packageName = `${vendor}/${pkgParam}`;
+  
+  // Get possible original versions from the normalized version
+  // Composer uses version_normalized in mirror URLs, but we store original versions
+  const possibleVersions = denormalizeVersion(version);
+
+  const upstreamHasRequestedVersion = (packageVersions: unknown, versionsToMatch: string[]): boolean => {
+    if (!packageVersions) return false;
+    if (Array.isArray(packageVersions)) {
+      // Composer 2 p2 format: array of version objects
+      return packageVersions.some((v: any) =>
+        versionsToMatch.includes(v?.version) || versionsToMatch.includes(v?.version_normalized)
+      );
+    }
+    if (typeof packageVersions === 'object') {
+      // Composer 1 format: object keyed by version
+      return versionsToMatch.some((v) => (packageVersions as any)[v]);
+    }
+    return false;
+  };
+  
+  // Look up package in database to find repo_id and actual version
+  let repoId: string | undefined;
+  if (repoIdParam && repoIdParam !== 'm') {
+    repoId = repoIdParam;
+
+    // If version exists for this explicit repo, normalize to the stored version
+    const [pkgInRepo] = await db
+      .select({ version: packages.version })
+      .from(packages)
+      .where(and(
+        eq(packages.repo_id, repoIdParam),
+        eq(packages.name, packageName),
+        or(...possibleVersions.map(v => eq(packages.version, v)))
+      ))
+      .limit(1);
+    if (pkgInRepo) {
+      version = pkgInRepo.version;
+    }
+  } else {
+    // Prefer a DB match on package+version if present (avoids unnecessary upstream calls)
+    const matchingPkgs = await db
+      .select({ repo_id: packages.repo_id, version: packages.version })
+      .from(packages)
+      .where(and(
+        eq(packages.name, packageName),
+        or(...possibleVersions.map(v => eq(packages.version, v)))
+      ));
+
+    if (matchingPkgs.length > 0) {
+      // Deterministically pick repo by UI priority (created_at ASC), and only then fall back
+      const repoIds = Array.from(new Set(matchingPkgs.map((p: { repo_id: string }) => p.repo_id))).filter(
+        (id): id is string => typeof id === 'string' && id.length > 0
+      );
+
+      const nonPackagistRepoIds = repoIds.filter((id) => id !== 'packagist');
+      if (nonPackagistRepoIds.length > 0) {
+        const reposInPriorityOrder = await db
+          .select({ id: repositories.id })
+          .from(repositories)
+          .where(inArray(repositories.id, nonPackagistRepoIds))
+          .orderBy(repositories.created_at);
+
+        const pickedRepoId = reposInPriorityOrder[0]?.id;
+        if (pickedRepoId) {
+          repoId = pickedRepoId;
+          const matched = matchingPkgs.find((p: { repo_id: string; version: string }) => p.repo_id === pickedRepoId);
+          if (matched) {
+            version = matched.version;
+          }
+        }
+      }
+
+      // If only Packagist is available in DB (or repo lookup failed), fall back to the first match
+      if (!repoId) {
+        repoId = matchingPkgs[0]!.repo_id;
+        version = matchingPkgs[0]!.version;
+      }
+    } else {
+      // Not in DB for this version - probe active repos in deterministic priority order
+      const activeRepos = await db
+        .select()
+        .from(repositories)
+        .where(eq(repositories.status, 'active'))
+        .orderBy(repositories.created_at);
+
+      const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch.js');
+
+      for (const repo of activeRepos) {
+        if (repo.vcs_type !== 'composer') continue;
+        if (!matchesPackageFilter(repo.package_filter, packageName)) continue;
+
+        try {
+          const packageData = await fetchPackageFromUpstream(
+            {
+              id: repo.id,
+              url: repo.url,
+              vcs_type: repo.vcs_type,
+              credential_type: repo.credential_type,
+              auth_credentials: repo.auth_credentials,
+              package_filter: repo.package_filter,
+            },
+            packageName,
+            c.env.ENCRYPTION_KEY
+          );
+
+          const packageVersions = packageData?.packages?.[packageName];
+          if (upstreamHasRequestedVersion(packageVersions, possibleVersions)) {
+            repoId = repo.id;
+            break;
+          }
+        } catch (error) {
+          const logger = getLogger();
+          logger.debug('Repo does not have requested package version', {
+            repoId: repo.id,
+            packageName,
+            version,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Finally fall back to 'packagist' if no private repos have it and mirroring is enabled
+      if (!repoId) {
+        const mirroringEnabled = await isPackagistMirroringEnabled(c.env.KV);
+        if (mirroringEnabled) {
+          repoId = 'packagist';
+        }
+      }
+    }
+  }
+
+  if (!repoId) {
+    return c.json({ error: 'Bad Request', message: 'Could not determine repository for package' }, 400);
   }
 
   const storage = c.var.storage;
@@ -685,7 +842,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
     if (repo && repo.vcs_type === 'composer') {
       try {
         // Try to fetch package metadata from upstream and get source_dist_url
-        const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
+        const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch.js');
         const packageData = await fetchPackageFromUpstream(
           {
             id: repo.id,
@@ -699,7 +856,29 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
           c.env.ENCRYPTION_KEY
         );
 
-        const packageVersion = packageData?.packages?.[packageName]?.[version];
+        // p2 format returns packages[name] as an array, need to find matching version
+        const packageVersions = packageData?.packages?.[packageName];
+        let packageVersion: any = null;
+        
+        if (Array.isArray(packageVersions)) {
+          // Composer 2 p2 format: array of versions
+          // Also try denormalized versions for matching
+          const possibleVersions = denormalizeVersion(version);
+          packageVersion = packageVersions.find((v: any) => 
+            possibleVersions.includes(v.version) || 
+            possibleVersions.includes(v.version_normalized)
+          );
+        } else if (packageVersions && typeof packageVersions === 'object') {
+          // Composer 1 format: object keyed by version
+          const possibleVersions = denormalizeVersion(version);
+          for (const v of possibleVersions) {
+            if (packageVersions[v]) {
+              packageVersion = packageVersions[v];
+              break;
+            }
+          }
+        }
+        
         if (packageVersion?.dist?.url) {
           const sourceDistUrl = packageVersion.dist.url;
 

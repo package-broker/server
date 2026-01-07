@@ -24,7 +24,7 @@ import {
  * These routes MUST stay at root level to maintain Composer protocol compatibility:
  * - /packages.json
  * - /p2/:vendor/:package
- * - /dist/*
+ * - /dists/* (mirror format, matching Private Packagist style)
  */
 export function mountComposerRoutes(app: AppInstance): void {
   const composerAuth = async (c: any, next: any) => {
@@ -44,13 +44,19 @@ export function mountComposerRoutes(app: AppInstance): void {
     return distAuthMiddleware(c, next);
   };
 
-  // GET /dist/m/:vendor/:package/:version - mirror URL format
+  // GET /dists/:vendor/:package/:version/:reference - mirror URL format (Private Packagist style)
+  // Server resolves repository from package name - no repo ID in URL
+  // Reference can be a commit hash or generated reference
+  app.get('/dists/:vendor/:package/:version/:reference', composerAuth, distAuth, distMirrorRoute);
+
+  // Legacy routes for backwards compatibility
+  // GET /dist/m/:vendor/:package/:version - old mirror URL format
   app.get('/dist/m/:vendor/:package/:version', composerAuth, distAuth, distMirrorRoute);
 
-  // GET /dist/:vendor/:package/:version/:reference - lockfile format
+  // GET /dist/:vendor/:package/:version/:reference - lockfile format (legacy)
   app.get('/dist/:vendor/:package/:version/:reference', composerAuth, distAuth, distLockfileRoute);
 
-  // GET /dist/:repo_id/:vendor/:package/:version - repository-specific format
+  // GET /dist/:repo_id/:vendor/:package/:version - repository-specific format (legacy)
   app.get('/dist/:repo_id/:vendor/:package/:version', composerAuth, distAuth, distRoute);
 }
 

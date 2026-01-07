@@ -13,6 +13,7 @@ import { eq, and, inArray, or } from 'drizzle-orm';
 import { createJobProcessor, type Job } from '../jobs/processor';
 import type { StorageDriver } from '../storage/driver';
 import { isPackagistMirroringEnabled, isPackageCachingEnabled } from '../modules/admin';
+import { matchesPackageFilter } from '../utils/repository-filter.js';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { nanoid } from 'nanoid';
 import { encryptCredentials } from '../utils/encryption';
@@ -346,27 +347,8 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
     try {
       // Early filter: skip repo if package_filter is set and package doesn't match
       // This avoids unnecessary API calls to upstream repositories
-      // Supports wildcards: "mirasvit/*" matches all mirasvit packages
-      if (repo.package_filter) {
-        const patterns = repo.package_filter.split(',').map((p: string) => p.trim().toLowerCase());
-        const pkgLower = packageName.toLowerCase();
-        const matches = patterns.some((pattern: string) => {
-          if (pattern.endsWith('/*')) {
-            // Wildcard pattern: "vendor/*" matches "vendor/anything"
-            const prefix = pattern.slice(0, -1); // "vendor/"
-            return pkgLower.startsWith(prefix);
-          }
-          if (pattern.endsWith('*')) {
-            // Prefix wildcard: "mirasvit*" matches "mirasvit-module", "mirasvit/foo"
-            const prefix = pattern.slice(0, -1);
-            return pkgLower.startsWith(prefix);
-          }
-          // Exact match
-          return pkgLower === pattern;
-        });
-        if (!matches) {
-          continue; // Skip this repo - package not in filter list
-        }
+      if (!matchesPackageFilter(repo.package_filter, packageName)) {
+        continue; // Skip this repo - package not in filter list
       }
 
       let packageData = null;
@@ -492,7 +474,9 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
       'metadata-url': `${baseUrl}/p2/%package%.json`,
       'mirrors': [
         {
-          'dist-url': `${baseUrl}/dist/m/%package%/%version%.%type%`,
+          // Mirror URL format matching Private Packagist style
+          // Server resolves repository from package name - no repo ID needed
+          'dist-url': `${baseUrl}/dists/%package%/%version%/%reference%.%type%`,
           'preferred': true,
         },
       ],
