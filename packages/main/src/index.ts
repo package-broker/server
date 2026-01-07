@@ -65,6 +65,7 @@ import {
   createD1Database,
   type DatabasePort,
   createApp,
+  KVCacheDriver,
 } from '@package-broker/core';
 
 // Re-export the Workflow class for Cloudflare to find it
@@ -162,8 +163,13 @@ export function createWorker(config: WorkerConfig = { storage: 'r2' }, env?: Env
         await next();
       });
 
-      // Additional Cloudflare bindings (KV, Queue) can be added here if factory supports them being absent
-      // The current factory implementation assumes they are passed in Bindings or handled by specific routes
+      // Cache middleware (KV)
+      app.use('*', async (c, next) => {
+        if (c.env.KV) {
+          c.set('cache', new KVCacheDriver(c.env.KV));
+        }
+        await next();
+      });
     }
   });
 
