@@ -305,20 +305,32 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Dynamic credential fields */}
-          {credentialFields.map((field) => (
-            <div key={field.name}>
-              <label className="label">{field.label}</label>
-              <input
-                type={field.type}
-                value={credentials[field.name] || ''}
-                onChange={(e) =>
-                  setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
-                }
-                className="input w-full"
-                required
-              />
+          {credentialType === 'none' ? (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <p className="text-sm text-slate-300">
+                <strong className="text-slate-200">Public Repository</strong>
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                No authentication required. Packages will be synced on-demand when requested via Composer.
+                {sourceType === 'git' && ' Make sure the repository is publicly accessible.'}
+              </p>
             </div>
-          ))}
+          ) : (
+            credentialFields.map((field) => (
+              <div key={field.name}>
+                <label className="label">{field.label}</label>
+                <input
+                  type={field.type}
+                  value={credentials[field.name] || ''}
+                  onChange={(e) =>
+                    setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
+                  }
+                  className="input w-full"
+                  required
+                />
+              </div>
+            ))
+          )}
 
           {sourceType === 'git' && (
             <div>
@@ -336,22 +348,21 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {sourceType === 'composer' && (
-            <div>
-              <label className="label">Package Filter (optional)</label>
-              <input
-                type="text"
-                value={packageFilter}
-                onChange={(e) => setPackageFilter(e.target.value)}
-                placeholder="vendor/package1, vendor/package2"
-                className="input w-full"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Comma-separated list of packages to filter. Optional - leave empty to allow all packages.
-                Packages are loaded on-demand when requested by Composer.
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="label">Package Filter (optional)</label>
+            <input
+              type="text"
+              value={packageFilter}
+              onChange={(e) => setPackageFilter(e.target.value)}
+              placeholder="vendor/*, vendor/package1"
+              className="input w-full"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              {sourceType === 'git' 
+                ? 'Packages this repo provides. Supports wildcards: "vendor/*" matches all vendor packages. Reduces API calls.'
+                : 'Filter packages with wildcards: "vendor/*" or exact names. Leave empty to allow all.'}
+            </p>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">
@@ -501,25 +512,37 @@ function EditRepositoryModal({ repository, onClose }: { repository: Repository; 
           </div>
 
           {/* Dynamic credential fields */}
-          <div className="space-y-4">
-            <p className="text-xs text-slate-500">
-              Leave credential fields empty to keep current values.
-            </p>
-            {credentialFields.map((field) => (
-              <div key={field.name}>
-                <label className="label">{field.label}</label>
-                <input
-                  type={field.type}
-                  value={credentials[field.name] || ''}
-                  onChange={(e) =>
-                    setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
-                  }
-                  placeholder="Leave empty to keep current"
-                  className="input w-full"
-                />
-              </div>
-            ))}
-          </div>
+          {credentialType === 'none' ? (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <p className="text-sm text-slate-300">
+                <strong className="text-slate-200">Public Repository</strong>
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                No authentication required. Packages will be synced on-demand when requested via Composer.
+                {sourceType === 'git' && ' Make sure the repository is publicly accessible.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500">
+                Leave credential fields empty to keep current values.
+              </p>
+              {credentialFields.map((field) => (
+                <div key={field.name}>
+                  <label className="label">{field.label}</label>
+                  <input
+                    type={field.type}
+                    value={credentials[field.name] || ''}
+                    onChange={(e) =>
+                      setCredentials((prev) => ({ ...prev, [field.name]: e.target.value }))
+                    }
+                    placeholder="Leave empty to keep current"
+                    className="input w-full"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {sourceType === 'git' && (
             <div>
@@ -537,22 +560,21 @@ function EditRepositoryModal({ repository, onClose }: { repository: Repository; 
             </div>
           )}
 
-          {sourceType === 'composer' && (
-            <div>
-              <label className="label">Package Filter (optional)</label>
-              <input
-                type="text"
-                value={packageFilter}
-                onChange={(e) => setPackageFilter(e.target.value)}
-                placeholder="vendor/package1, vendor/package2"
-                className="input w-full"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Comma-separated list of packages to filter. Optional - leave empty to allow all packages.
-                Packages are loaded on-demand when requested by Composer.
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="label">Package Filter (optional)</label>
+            <input
+              type="text"
+              value={packageFilter}
+              onChange={(e) => setPackageFilter(e.target.value)}
+              placeholder="vendor/*, vendor/package1"
+              className="input w-full"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              {sourceType === 'git' 
+                ? 'Packages this repo provides. Supports wildcards: "vendor/*" matches all vendor packages. Reduces API calls.'
+                : 'Filter packages with wildcards: "vendor/*" or exact names. Leave empty to allow all.'}
+            </p>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">

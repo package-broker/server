@@ -39,6 +39,87 @@ export interface ComposerRouteEnv {
 const DEFAULT_MAX_VERSIONS = 50;
 
 /**
+ * Schedule background storage of package data.
+ * Uses Cloudflare Workflows when available, falls back to inline processing.
+ * 
+ * This is extracted to avoid code duplication between Composer and GitHub handlers.
+ */
+function schedulePackageStorage(
+  c: Context<ComposerRouteEnv>,
+  packageName: string,
+  packageData: any,
+  repoId: string,
+  baseUrl: string
+): void {
+  const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
+  if (skipStorage) return;
+
+  const workflow = c.env.PACKAGE_STORAGE_WORKFLOW;
+  const logger = getLogger();
+
+  if (workflow) {
+    // Use Cloudflare Workflow for durable background processing
+    c.executionCtx.waitUntil((async () => {
+      try {
+        const instance = await workflow.create({
+          id: `pkg-${packageName.replace('/', '-')}-${repoId}-${Date.now()}`,
+          params: {
+            packageName,
+            packageData,
+            repoId,
+            proxyBaseUrl: baseUrl,
+          },
+        });
+        logger.debug('Workflow triggered for package storage', {
+          packageName,
+          repoId,
+          instanceId: instance.id
+        });
+      } catch (e) {
+        logger.warn('Workflow creation failed, falling back to inline', {
+          packageName,
+          repoId,
+          error: e instanceof Error ? e.message : String(e)
+        });
+        try {
+          const db = c.get('database');
+          await transformPackageDistUrls(packageData, repoId, baseUrl, db);
+        } catch (fallbackError) {
+          logger.warn('Fallback storage also failed', {
+            packageName,
+            repoId,
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+          });
+        }
+      }
+    })());
+  } else {
+    // Inline background processing
+    c.executionCtx.waitUntil((async () => {
+      try {
+        const db = c.get('database');
+        const { storedCount, errors } = await transformPackageDistUrls(packageData, repoId, baseUrl, db);
+        logger.info('Stored package versions (background)', { 
+          packageName, 
+          repoId, 
+          storedCount, 
+          errorCount: errors.length 
+        });
+        if (errors.length > 0) {
+          logger.warn('Package storage errors (background)', { packageName, repoId, errors });
+        }
+      } catch (e) {
+        logger.warn('Background storage failed', { 
+          packageName, 
+          repoId, 
+          error: e instanceof Error ? e.message : String(e) 
+        });
+      }
+    })());
+  }
+}
+
+/**
  * GET /packages.json
  * Serve aggregated packages.json for all private repositories
  * Uses KV caching with stale-while-revalidate strategy
@@ -256,12 +337,44 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
     .from(repositories)
     .where(eq(repositories.status, 'active'));
 
-  // Try to fetch from upstream Composer repositories
+  const url = new URL(c.req.url);
+  const baseUrl = `${url.protocol}//${url.host}`;
+  const maxVersions = getMaxVersions(c.env);
+
+  // Try to fetch from upstream repositories (Composer and GitHub)
   for (const repo of activeRepos) {
-    if (repo.vcs_type === 'composer') {
-      try {
+    try {
+      // Early filter: skip repo if package_filter is set and package doesn't match
+      // This avoids unnecessary API calls to upstream repositories
+      // Supports wildcards: "mirasvit/*" matches all mirasvit packages
+      if (repo.package_filter) {
+        const patterns = repo.package_filter.split(',').map((p: string) => p.trim().toLowerCase());
+        const pkgLower = packageName.toLowerCase();
+        const matches = patterns.some((pattern: string) => {
+          if (pattern.endsWith('/*')) {
+            // Wildcard pattern: "vendor/*" matches "vendor/anything"
+            const prefix = pattern.slice(0, -1); // "vendor/"
+            return pkgLower.startsWith(prefix);
+          }
+          if (pattern.endsWith('*')) {
+            // Prefix wildcard: "mirasvit*" matches "mirasvit-module", "mirasvit/foo"
+            const prefix = pattern.slice(0, -1);
+            return pkgLower.startsWith(prefix);
+          }
+          // Exact match
+          return pkgLower === pattern;
+        });
+        if (!matches) {
+          continue; // Skip this repo - package not in filter list
+        }
+      }
+
+      let packageData = null;
+      
+      if (repo.vcs_type === 'composer') {
+        // Fetch from Composer repository (Satis, Private Packagist, etc.)
         const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
-        const packageData = await fetchPackageFromUpstream(
+        packageData = await fetchPackageFromUpstream(
           {
             id: repo.id,
             url: repo.url,
@@ -273,93 +386,62 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
           packageName,
           c.env.ENCRYPTION_KEY
         );
-
-        if (packageData) {
-          const url = new URL(c.req.url);
-          const baseUrl = `${url.protocol}//${url.host}`;
-          const maxVersions = getMaxVersions(c.env);
-          const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl, maxVersions);
-
-          const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
-          if (!skipStorage) {
-            const workflow = c.env.PACKAGE_STORAGE_WORKFLOW;
-            const repoLogger = getLogger();
-
-            if (workflow) {
-              // Use Cloudflare Workflow for durable background processing
-              c.executionCtx.waitUntil((async () => {
-                try {
-                  const instance = await workflow.create({
-                    id: `pkg-${packageName.replace('/', '-')}-${repo.id}-${Date.now()}`,
-                    params: {
-                      packageName,
-                      packageData,
-                      repoId: repo.id,
-                      proxyBaseUrl: baseUrl,
-                    },
-                  });
-                  repoLogger.debug('Workflow triggered for repo package storage', {
-                    packageName,
-                    repoId: repo.id,
-                    instanceId: instance.id
-                  });
-                } catch (e) {
-                  repoLogger.warn('Workflow creation failed for repo, falling back to inline', {
-                    packageName,
-                    repoId: repo.id,
-                    error: e instanceof Error ? e.message : String(e)
-                  });
-                  try {
-                    const db = c.get('database');
-                    await transformPackageDistUrls(packageData, repo.id, baseUrl, db);
-                  } catch (fallbackError) {
-                    repoLogger.warn('Fallback storage also failed', {
-                      packageName,
-                      repoId: repo.id,
-                      error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-                    });
-                  }
-                }
-              })());
-            } else {
-              c.executionCtx.waitUntil((async () => {
-                try {
-                  const db = c.get('database');
-                  const { storedCount, errors } = await transformPackageDistUrls(packageData, repo.id, baseUrl, db);
-                  repoLogger.info('Stored package versions from repo (background)', { packageName, repoId: repo.id, storedCount, errorCount: errors.length });
-                  if (errors.length > 0) {
-                    repoLogger.warn('Package storage errors (background)', { packageName, repoId: repo.id, errors });
-                  }
-                } catch (e) {
-                  repoLogger.warn('Background storage failed', { packageName, repoId: repo.id, error: e instanceof Error ? e.message : String(e) });
-                }
-              })());
-            }
-          }
-
-          // Track metadata request (cache miss, from upstream)
-          const analytics = getAnalytics();
-          const requestId = c.get('requestId') as string | undefined;
-          const packageCount = transformedData.packages?.[packageName] ? Object.keys(transformedData.packages[packageName]).length : 0;
-          analytics.trackPackageMetadataRequest({
-            requestId,
-            cacheHit: false,
-            packageCount,
-          });
-
-          const headers = new Headers();
-          headers.set('Content-Type', 'application/json');
-          headers.set('Last-Modified', new Date().toUTCString());
-          headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
-          headers.set('X-Cache', 'MISS-UPSTREAM');
-
-          return new Response(JSON.stringify(transformedData), { status: 200, headers });
+      } else if (repo.vcs_type === 'git') {
+        // Fetch from GitHub repository (public or private)
+        const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
+        
+        // Validate GitHub URL using proper hostname check (security)
+        if (!isGitHubUrl(repo.url)) {
+          // Skip non-GitHub git repos (e.g., GitLab, Bitbucket - not yet supported)
+          continue;
         }
-      } catch (error) {
-        const logger = getLogger();
-        logger.warn('Error fetching package from repo', { packageName, repoId: repo.id, error: error instanceof Error ? error.message : String(error) });
-        // Continue to next repository
+        packageData = await fetchPackageFromGitHub(
+          {
+            id: repo.id,
+            url: repo.url,
+            vcs_type: repo.vcs_type,
+            credential_type: repo.credential_type,
+            auth_credentials: repo.auth_credentials,
+            package_filter: repo.package_filter,
+          },
+          packageName,
+          c.env.ENCRYPTION_KEY
+        );
       }
+
+      if (packageData) {
+        const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl, maxVersions);
+
+        // Store package versions in background
+        schedulePackageStorage(c, packageName, packageData, repo.id, baseUrl);
+
+        // Track metadata request (cache miss, from upstream)
+        const analytics = getAnalytics();
+        const requestId = c.get('requestId') as string | undefined;
+        const packageCount = transformedData.packages?.[packageName] ? Object.keys(transformedData.packages[packageName]).length : 0;
+        analytics.trackPackageMetadataRequest({
+          requestId,
+          cacheHit: false,
+          packageCount,
+        });
+
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        headers.set('Last-Modified', new Date().toUTCString());
+        headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+        headers.set('X-Cache', 'MISS-UPSTREAM');
+
+        return new Response(JSON.stringify(transformedData), { status: 200, headers });
+      }
+    } catch (error) {
+      const logger = getLogger();
+      logger.warn('Error fetching package from repo', { 
+        packageName, 
+        repoId: repo.id, 
+        vcsType: repo.vcs_type,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      // Continue to next repository
     }
   }
 

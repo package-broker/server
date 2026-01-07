@@ -173,6 +173,10 @@ export async function syncRepository(
 
 /**
  * Sync a Git repository based on URL and credential type
+ * 
+ * Supports:
+ * - Authenticated GitHub repos (github_token)
+ * - Public GitHub repos (none credential type)
  */
 async function syncGitRepository(
   url: string,
@@ -185,10 +189,16 @@ async function syncGitRepository(
 
   if (urlMatch) {
     const [, owner, repo] = urlMatch;
+    
+    // For 'none' credential type, pass null token (public repo access)
+    const token = credentialType === 'none' 
+      ? null 
+      : (credentials.token || credentials.password || '');
+    
     return syncGitHubRepository({
       owner,
       repo: repo.replace('.git', ''),
-      token: credentials.token || credentials.password || '',
+      token,
       composerJsonPath,
     });
   }

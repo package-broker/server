@@ -830,7 +830,7 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
       }
     }
   } else {
-    // Handle other Composer repositories
+    // Handle Composer and Git repositories
     const [repo] = await db
       .select()
       .from(repositories)
@@ -841,12 +841,14 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
       return c.json({ error: 'Not Found', message: 'Repository not found' }, 404);
     }
 
-    if (repo.vcs_type !== 'composer') {
-      return c.json({ error: 'Bad Request', message: 'Only Composer repositories can be used for manual package addition' }, 400);
+    // Allow both composer and git repositories
+    if (repo.vcs_type !== 'composer' && repo.vcs_type !== 'git') {
+      return c.json({ error: 'Bad Request', message: 'Only Composer and Git repositories can be used for manual package addition' }, 400);
     }
 
-    if (repo.status !== 'active') {
-      return c.json({ error: 'Bad Request', message: 'Repository is not active' }, 400);
+    // Allow active, error, and pending repos (matching UI filter)
+    if (repo.status === 'syncing') {
+      return c.json({ error: 'Bad Request', message: 'Repository is currently syncing, please wait' }, 400);
     }
 
     const upstreamRepo: UpstreamRepository = {
@@ -860,7 +862,18 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
 
     for (const packageName of body.package_names) {
       try {
-        const packageData = await fetchPackageFromUpstream(upstreamRepo, packageName, c.env.ENCRYPTION_KEY);
+        let packageData = null;
+
+        if (repo.vcs_type === 'composer') {
+          packageData = await fetchPackageFromUpstream(upstreamRepo, packageName, c.env.ENCRYPTION_KEY);
+        } else if (repo.vcs_type === 'git') {
+          const { fetchPackageFromGitHub, isGitHubUrl } = await import('../../utils/upstream-fetch');
+          if (!isGitHubUrl(repo.url)) {
+            results.push({ package: packageName, success: false, error: 'Only GitHub URLs are supported for git repositories' });
+            continue;
+          }
+          packageData = await fetchPackageFromGitHub(upstreamRepo, packageName, c.env.ENCRYPTION_KEY);
+        }
 
         if (!packageData) {
           results.push({ package: packageName, success: false, error: 'Package not found' });

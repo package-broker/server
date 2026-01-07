@@ -11,25 +11,33 @@ export const credentialTypeSchema = z.enum([
   'bitbucket_api_key',
   'bitbucket_server_pat',
   'bearer_token',
+  'none',
 ]);
 
 export const vcsTypeSchema = z.enum(['git', 'composer', 'artifact']);
 
 // Repository schemas (inline to avoid circular dependency)
-export const createRepositorySchema = z.object({
+// Base schema without refinement (for .partial() compatibility in Zod v4)
+const repositoryBaseSchema = z.object({
   url: z.string().url('Invalid repository URL'),
   vcs_type: vcsTypeSchema,
   credential_type: credentialTypeSchema,
   // Zod v4 requires both key and value schemas
-  auth_credentials: z.record(z.string(), z.string()).refine(
-    (fields) => Object.keys(fields).length > 0,
-    'At least one credential field is required'
-  ),
+  // Empty object allowed for 'none' credential type (public repos)
+  auth_credentials: z.record(z.string(), z.string()),
   composer_json_path: z.string().optional(),
   package_filter: z.string().optional(), // Comma-separated list of packages to sync
 });
 
-export const updateRepositorySchema = createRepositorySchema.partial();
+// Create schema with refinement for credential validation
+export const createRepositorySchema = repositoryBaseSchema.refine(
+  (data) => data.credential_type === 'none' || Object.keys(data.auth_credentials).length > 0,
+  { message: 'Credentials are required unless using "none" authentication', path: ['auth_credentials'] }
+);
+
+// Update schema uses partial of base (without refinement)
+// Refinement doesn't apply to partial updates since fields are optional
+export const updateRepositorySchema = repositoryBaseSchema.partial();
 
 export const repositoryResponseSchema = z.object({
   id: z.string(),

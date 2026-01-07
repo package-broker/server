@@ -475,13 +475,16 @@ function AddPackagesModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     queryFn: getSettings,
   });
 
-  // Filter to only composer repositories, and add Packagist if enabled
+  // Filter to composer and git repositories, and add Packagist if enabled
+  // Allow active, error, and pending repos - users may want to try fetching even if test failed
   const availableRepositories = useMemo(() => {
-    const composerRepos = repositories.filter(
-      (repo) => repo.vcs_type === 'composer' && repo.status === 'active'
+    // Include both composer and git (GitHub) repositories
+    const mirrorableRepos = repositories.filter(
+      (repo) => (repo.vcs_type === 'composer' || repo.vcs_type === 'git') && 
+                (repo.status === 'active' || repo.status === 'error' || repo.status === 'pending')
     );
 
-    const repos: Array<Repository & { displayName: string }> = composerRepos
+    const repos: Array<Repository & { displayName: string }> = mirrorableRepos
       .filter(repo => {
         // Exclude manual Packagist repo if mirroring is enabled to avoid duplicates
         if (settings?.packagist_mirroring_enabled && repo.url === 'https://repo.packagist.org') {
@@ -491,7 +494,8 @@ function AddPackagesModal({ onClose, onSuccess }: { onClose: () => void; onSucce
       })
       .map((repo) => ({
         ...repo,
-        displayName: repo.url,
+        // Add (GitHub) suffix for git repos to help users distinguish
+        displayName: repo.vcs_type === 'git' ? `${repo.url} (GitHub)` : repo.url,
       }));
 
     // Add Packagist if mirroring is enabled

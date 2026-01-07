@@ -59,10 +59,13 @@ export const CREDENTIAL_FIELD_DEFINITIONS: Record<
 /**
  * Credential types allowed for each source type
  * Filters the credential dropdown based on what makes sense for the source
+ * 
+ * Note: 'none' is allowed for public repositories (e.g., open-source GitHub repos)
+ * that don't require authentication. These repos sync on-demand when packages are requested.
  */
 export const CREDENTIALS_BY_SOURCE_TYPE: Record<string, CredentialType[]> = {
-  composer: ['http_basic', 'bearer_token'],
-  git: ['github_token', 'gitlab_token', 'bitbucket_app_password', 'bitbucket_api_token', 'bitbucket_api_key', 'bitbucket_server_pat'],
+  composer: ['http_basic', 'bearer_token', 'none'],
+  git: ['github_token', 'gitlab_token', 'bitbucket_app_password', 'bitbucket_api_token', 'bitbucket_api_key', 'bitbucket_server_pat', 'none'],
 };
 
 /**

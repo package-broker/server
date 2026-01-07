@@ -1,4 +1,19 @@
-// Combined GitHub sync with two-tier strategy
+/*
+ * PACKAGE.broker
+ * Copyright (C) 2025 Łukasz Bajsarowicz
+ * Licensed under AGPL-3.0
+ */
+
+/**
+ * Combined GitHub sync orchestrator with strategy selection.
+ * 
+ * Supports:
+ * - Authenticated sync via GitHub Packages Registry (single API call)
+ * - Authenticated sync via GitHub Repository API (tree enumeration)
+ * - Unauthenticated sync for public repositories (token = null)
+ * 
+ * Designed to be extended for webhook integration (Issue #31).
+ */
 
 import type { SyncResult } from './types';
 import { syncViaGitHubPackages } from './strategies/github-packages';
@@ -7,23 +22,29 @@ import { syncViaGitHubApi } from './strategies/github-api';
 export interface GitHubRepositoryConfig {
   owner: string;
   repo?: string;
-  token: string;
+  /** GitHub token - null for public repositories (no auth) */
+  token: string | null;
   branch?: string;
   composerJsonPath?: string;
 }
 
 /**
- * Sync GitHub repository using two-tier strategy:
+ * Sync GitHub repository using strategy selection:
+ * 
+ * For authenticated requests (token provided):
  * 1. Primary: Try GitHub Packages Composer Registry (single API call)
  * 2. Fallback: Use GitHub Repository API (tree enumeration)
+ * 
+ * For public repositories (token = null):
+ * - Use GitHub Repository API directly (no Packages Registry access)
  */
 export async function syncGitHubRepository(
   config: GitHubRepositoryConfig
 ): Promise<SyncResult> {
   const { owner, repo, token, composerJsonPath } = config;
 
-  // Strategy 1: Try GitHub Packages first (if owner-level sync)
-  if (!repo) {
+  // For authenticated owner-level sync, try GitHub Packages first
+  if (!repo && token) {
     const packagesResult = await syncViaGitHubPackages(owner, token);
     if (packagesResult.success) {
       return {
@@ -32,15 +53,24 @@ export async function syncGitHubRepository(
         strategy: 'github_packages',
       };
     }
-    // If Packages failed, return error (no repo to fall back to)
+    // If Packages failed and no specific repo, return error
     return packagesResult;
   }
 
-  // Strategy 2: Fall back to Repository API
+  // Owner-level sync without token is not supported
+  if (!repo) {
+    return {
+      success: false,
+      packages: [],
+      error: 'repo_required_for_public_sync',
+    };
+  }
+
+  // Use Repository API (works for both authenticated and public repos)
   const apiResult = await syncViaGitHubApi(
     owner,
     repo,
-    token,
+    token, // null for public repos
     config.branch || 'main',
     composerJsonPath || '**/composer.json'
   );
@@ -59,7 +89,3 @@ export async function syncGitHubRepository(
     error: apiResult.error,
   };
 }
-
-
-
-

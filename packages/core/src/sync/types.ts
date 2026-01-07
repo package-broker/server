@@ -46,6 +46,8 @@ export interface ComposerPackagesJson {
   'provider-includes'?: Record<string, { sha256: string }>;
   'providers-lazy-url'?: string;
   'metadata-url'?: string;
+  // Composer 1 "includes" format - bundles all packages into include files
+  'includes'?: Record<string, { sha1: string }>;
 }
 
 /**
