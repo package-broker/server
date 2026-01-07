@@ -125,9 +125,19 @@ export async function fetchPackageFromUpstream(
     return null;
   }
   
-  // Check if uses provider-includes (Composer 1)
+  // Check if uses provider-includes (Composer 1 lazy loading)
   if (packagesJson['providers-url'] && packagesJson['provider-includes']) {
     return await fetchFromProviderIncludes(
+      baseUrl,
+      packagesJson,
+      packageName,
+      authHeaders
+    );
+  }
+
+  // Check if uses "includes" format (Composer 1 bundled format - used by Mirasvit, etc.)
+  if (packagesJson['includes']) {
+    return await fetchFromIncludes(
       baseUrl,
       packagesJson,
       packageName,
@@ -209,6 +219,71 @@ async function fetchFromProviderIncludes(
       }
     } catch (error) {
       console.warn(`Error fetching provider file ${providerUrl}:`, error);
+      continue;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Fetch package metadata using Composer 1 "includes" format.
+ * 
+ * This format bundles all packages into include files (used by Mirasvit, etc.).
+ * The packages.json contains:
+ * {
+ *   "packages": [],
+ *   "includes": {
+ *     "path/to/include$hash.json": { "sha1": "..." }
+ *   }
+ * }
+ * 
+ * Each include file contains all packages bundled together.
+ */
+async function fetchFromIncludes(
+  baseUrl: string,
+  packagesJson: ComposerPackagesJson,
+  packageName: string,
+  authHeaders: HeadersInit
+): Promise<ProviderPackageResponse | null> {
+  const includes = packagesJson['includes']!;
+  
+  // Fetch each include file and look for the package
+  for (const [includePath, { sha1 }] of Object.entries(includes)) {
+    // Replace $hash placeholder with actual hash if present
+    const resolvedPath = includePath.replace('$' + sha1, '$' + sha1);
+    const includeUrl = `${baseUrl}/${resolvedPath}`;
+    
+    try {
+      const response = await pRetry(
+        () =>
+          fetch(includeUrl, {
+            headers: {
+              ...authHeaders,
+              Accept: 'application/json',
+              'User-Agent': COMPOSER_USER_AGENT,
+            },
+          }),
+        { retries: 2 }
+      );
+      
+      if (!response.ok) {
+        console.warn(`Failed to fetch include file ${includeUrl}: ${response.status}`);
+        continue;
+      }
+      
+      const includeData = await response.json() as { packages: Record<string, Record<string, ComposerPackage>> };
+      
+      // Check if this include file contains our package
+      if (includeData.packages?.[packageName]) {
+        return {
+          packages: {
+            [packageName]: includeData.packages[packageName],
+          },
+        };
+      }
+    } catch (error) {
+      console.warn(`Error fetching include file ${includeUrl}:`, error);
       continue;
     }
   }
