@@ -16,12 +16,103 @@ import { downloadFromSource } from '../utils/download';
 import { decryptCredentials } from '../utils/encryption';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { nanoid } from 'nanoid';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, strFromU8, zipSync, Zippable } from 'fflate';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
 import { type AuthContext } from '../middleware/auth';
 import { isPackagistMirroringEnabled } from '../modules/admin';
 import { matchesPackageFilter } from '../utils/repository-filter.js';
+
+/**
+ * Parse a TAR archive and convert it to ZIP format.
+ * TAR format: 512-byte headers followed by file content (padded to 512 bytes).
+ * This handles POSIX ustar format.
+ */
+function convertTarToZip(tarData: Uint8Array): Uint8Array {
+  const files: Zippable = {};
+  let offset = 0;
+  
+  while (offset < tarData.length - 512) {
+    // Read header (512 bytes)
+    const header = tarData.slice(offset, offset + 512);
+    
+    // Check for empty header (end of archive)
+    if (header.every(b => b === 0)) {
+      break;
+    }
+    
+    // Extract filename (bytes 0-99, null-terminated)
+    let filename = '';
+    for (let i = 0; i < 100; i++) {
+      if (header[i] === 0) break;
+      filename += String.fromCharCode(header[i]);
+    }
+    
+    // Check for prefix (bytes 345-499 in ustar format)
+    // Magic is at 257-262
+    const magic = String.fromCharCode(...header.slice(257, 262));
+    if (magic === 'ustar') {
+      let prefix = '';
+      for (let i = 345; i < 500; i++) {
+        if (header[i] === 0) break;
+        prefix += String.fromCharCode(header[i]);
+      }
+      if (prefix) {
+        filename = prefix + '/' + filename;
+      }
+    }
+    
+    // Extract file size (bytes 124-135, octal, null-terminated)
+    let sizeStr = '';
+    for (let i = 124; i < 136; i++) {
+      if (header[i] === 0 || header[i] === 32) break;
+      sizeStr += String.fromCharCode(header[i]);
+    }
+    const size = parseInt(sizeStr, 8) || 0;
+    
+    // Extract file type (byte 156)
+    const typeFlag = header[156];
+    
+    offset += 512; // Move past header
+    
+    // Only process regular files (type '0' or '\0')
+    if ((typeFlag === 48 || typeFlag === 0) && size > 0 && filename && !filename.endsWith('/')) {
+      // Extract file content
+      const content = tarData.slice(offset, offset + size);
+      files[filename] = content;
+    }
+    
+    // Move to next entry (content is padded to 512-byte boundary)
+    offset += Math.ceil(size / 512) * 512;
+  }
+  
+  // Create ZIP from files
+  return zipSync(files, { level: 6 });
+}
+
+/**
+ * Check if data is a TAR archive by looking at magic bytes.
+ */
+function isTarArchive(data: Uint8Array): boolean {
+  if (data.length < 512) return false;
+  
+  // Check for ustar magic at offset 257
+  const magic = String.fromCharCode(...data.slice(257, 262));
+  if (magic === 'ustar') return true;
+  
+  // Check for old tar format (no magic, but valid header structure)
+  // Look for null-terminated filename at start
+  if (data[0] !== 0 && data.slice(0, 100).includes(0)) {
+    // Check if bytes 124-136 look like octal size
+    const sizeBytes = data.slice(124, 136);
+    const allValidOctal = Array.from(sizeBytes).every(b => 
+      b === 0 || b === 32 || (b >= 48 && b <= 55)
+    );
+    if (allValidOctal) return true;
+  }
+  
+  return false;
+}
 
 /**
  * Convert a normalized version back to possible original versions.
@@ -67,6 +158,24 @@ function denormalizeVersion(normalizedVersion: string): string[] {
   }
   
   return versions;
+}
+
+/**
+ * Detect archive type from URL or default to zip.
+ * Returns the content type and file extension.
+ */
+function getArchiveTypeFromUrl(url: string): { contentType: string; extension: string } {
+  const urlLower = url.toLowerCase();
+  if (urlLower.endsWith('.tar.gz') || urlLower.endsWith('.tgz')) {
+    return { contentType: 'application/gzip', extension: 'tar.gz' };
+  }
+  if (urlLower.endsWith('.tar.bz2')) {
+    return { contentType: 'application/x-bzip2', extension: 'tar.bz2' };
+  }
+  if (urlLower.endsWith('.tar')) {
+    return { contentType: 'application/x-tar', extension: 'tar' };
+  }
+  return { contentType: 'application/zip', extension: 'zip' };
 }
 
 export interface DistRouteEnv {
@@ -223,8 +332,15 @@ async function extractAndStoreReadme(
 export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
   const vendor = c.req.param('vendor');
   const pkgParam = c.req.param('package');
-  let version = c.req.param('version')?.replace('.zip', '') || '';
-  const reference = c.req.param('reference')?.replace('.zip', '');
+  
+  // Strip common archive extensions: .zip, .tar, .tar.gz, .tar.bz2, .tgz
+  const stripArchiveExtension = (str: string | undefined): string => {
+    if (!str) return '';
+    return str.replace(/\.(zip|tar\.gz|tar\.bz2|tgz|tar)$/, '');
+  };
+  
+  let version = stripArchiveExtension(c.req.param('version'));
+  const reference = stripArchiveExtension(c.req.param('reference')) || undefined;
   
   // Optional legacy route param (only present on /dist/:repo_id/:vendor/:package/:version)
   const repoIdParam = c.req.param('repo_id');
@@ -882,7 +998,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
         if (packageVersion?.dist?.url) {
           const sourceDistUrl = packageVersion.dist.url;
 
-          // Download from source and stream to client
+          // Download from source
           const credentialsJson = await decryptCredentials(repo.auth_credentials, c.env.ENCRYPTION_KEY);
           const credentials = JSON.parse(credentialsJson);
 
@@ -893,11 +1009,27 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
           );
 
           if (sourceResponse.ok && sourceResponse.body) {
+            // Read the full response to check format and convert if needed
+            const arrayBuffer = await sourceResponse.arrayBuffer();
+            const inputData = new Uint8Array(arrayBuffer);
+            
+            // Convert TAR to ZIP to avoid Composer's TarDownloader race condition bug
+            let responseData: Uint8Array;
+            if (isTarArchive(inputData)) {
+              const logger = getLogger();
+              logger.info('Converting TAR to ZIP for Composer compatibility', { packageName, version });
+              responseData = convertTarToZip(inputData);
+            } else {
+              responseData = inputData;
+            }
+            
             const headers = new Headers();
+            // Always serve as ZIP (we convert TAR to ZIP above)
             headers.set('Content-Type', 'application/zip');
+            headers.set('Content-Length', String(responseData.length));
             headers.set('Cache-Control', 'public, max-age=3600');
 
-            return new Response(sourceResponse.body, {
+            return new Response(responseData, {
               status: 200,
               headers,
             });
@@ -1107,15 +1239,44 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
     );
   }
 
-  // Build response
+  // Convert stream to buffer to check format and convert TAR to ZIP if needed
+  let responseData: Uint8Array;
+  if (stream) {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let done = false;
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+      if (result.value) {
+        chunks.push(result.value);
+      }
+    }
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    responseData = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      responseData.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
+    // Convert TAR to ZIP to avoid Composer's TarDownloader race condition bug
+    if (isTarArchive(responseData)) {
+      const logger = getLogger();
+      logger.info('Converting stored TAR to ZIP for Composer compatibility', { packageName, version });
+      responseData = convertTarToZip(responseData);
+    }
+  } else {
+    // No data - return 404
+    return c.json({ error: 'Not Found', message: 'Artifact data not found' }, 404);
+  }
+
+  // Build response - always serve as ZIP
   const headers = new Headers();
   headers.set('Content-Type', 'application/zip');
   const filename = `${packageName.replace('/', '--')}--${version}.zip`;
   headers.set('Content-Disposition', `attachment; filename="${filename}"`);
-
-  if (artifact?.size) {
-    headers.set('Content-Length', String(artifact.size));
-  }
+  headers.set('Content-Length', String(responseData.length));
 
   if (artifact?.created_at) {
     headers.set('Last-Modified', new Date(artifact.created_at * 1000).toUTCString());
@@ -1132,11 +1293,11 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
     packageName,
     version,
     repoId,
-    size: artifact?.size ?? undefined,
-    cacheHit: !!stream,
+    size: responseData.length,
+    cacheHit: true,
   });
 
-  return new Response(stream, {
+  return new Response(responseData, {
     status: 200,
     headers,
   });

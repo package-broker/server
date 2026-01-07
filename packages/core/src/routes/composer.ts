@@ -476,6 +476,7 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
         {
           // Mirror URL format matching Private Packagist style
           // Server resolves repository from package name - no repo ID needed
+          // Use %type% to preserve original archive format from upstream
           'dist-url': `${baseUrl}/dists/%package%/%version%/%reference%.%type%`,
           'preferred': true,
         },
@@ -494,8 +495,8 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
     if (!packagesMap[pkg.name]) {
       packagesMap[pkg.name] = {};
     }
-    // Use dist_url (proxy URL) and transform to mirror format
-    // source_dist_url is the original external URL - don't expose it to clients
+    
+    // Always use ZIP type - server converts TAR to ZIP to avoid Composer's TarDownloader bug
     packagesMap[pkg.name][pkg.version] = {
       name: pkg.name,
       version: pkg.version,
@@ -539,14 +540,6 @@ export function buildP2Response(
   const versions: any[] = [];
 
   for (const pkg of filteredPackageVersions) {
-    const dist: any = {
-      type: 'zip',
-      url: transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
-    };
-    if (pkg.dist_reference) {
-      dist.reference = pkg.dist_reference;
-    }
-
     let fullMetadata: any = null;
 
     if (pkg.metadata) {
@@ -554,6 +547,15 @@ export function buildP2Response(
         fullMetadata = JSON.parse(pkg.metadata);
       } catch {
       }
+    }
+
+    // Always use ZIP type - server converts TAR to ZIP to avoid Composer's TarDownloader bug
+    const dist: any = {
+      type: 'zip',
+      url: transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
+    };
+    if (pkg.dist_reference) {
+      dist.reference = pkg.dist_reference;
     }
 
     const displayVersion: string =
@@ -608,9 +610,7 @@ export function buildP2Response(
           };
         }
 
-        if (fullMetadata.dist?.type && fullMetadata.dist.type !== 'zip') {
-          dist.type = fullMetadata.dist.type;
-        }
+        // dist.type is already set from metadata above
         if (fullMetadata.dist?.shasum) {
           dist.shasum = fullMetadata.dist.shasum;
         }
@@ -667,6 +667,9 @@ export function buildP2Response(
 
     // Update dist with any metadata overrides
     versionDataBase.dist = dist;
+
+    // Remove upstream notification-url (not needed for our server)
+    delete versionDataBase['notification-url'];
 
     versions.push(versionDataBase);
 
@@ -1070,6 +1073,7 @@ function transformDistUrlsInMemory(
           : deriveVersionNormalized(version);
 
       // Build transformed version with original display version
+      // Always use ZIP type - server converts TAR to ZIP to avoid Composer's TarDownloader bug
       const versionData: any = {
         ...metadata,
         name: pkgName,
@@ -1077,7 +1081,7 @@ function transformDistUrlsInMemory(
         ...(normalizedVersion ? { version_normalized: normalizedVersion } : {}),
         dist: {
           ...metadata.dist,
-          type: metadata.dist?.type || 'zip',
+          type: 'zip',
           url: `${proxyBaseUrl}/dist/m/${pkgName}/${version}.zip`,
           reference: distReference,
         },
@@ -1089,6 +1093,9 @@ function transformDistUrlsInMemory(
         (typeof versionData.source !== 'object' || Array.isArray(versionData.source))) {
         delete versionData.source;
       }
+
+      // Remove upstream notification-url (not needed for our server)
+      delete versionData['notification-url'];
 
       // Push to array (Composer 2 p2 format)
       result.packages[pkgName].push(versionData);
