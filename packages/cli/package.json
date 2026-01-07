@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/cli",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "CLI tool to initialize PACKAGE.broker configuration",
   "type": "module",
   "bin": {
