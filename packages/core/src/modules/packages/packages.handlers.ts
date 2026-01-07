@@ -2,7 +2,7 @@
 
 import type { Context } from 'hono';
 import type { OpenAPIContext } from '../../routes/api/types';
-import type { DatabasePort } from '../../ports';
+import type { DatabasePort, CachePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
 import { eq, like, and, sql, count, countDistinct, inArray } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -25,6 +25,7 @@ export interface PackagesRouteEnv {
   Variables: {
     database: DatabasePort;
     storage: StorageDriver;
+    cache?: CachePort;
   };
 }
 
@@ -1139,6 +1140,16 @@ export async function uploadPackage(c: OpenAPIContext<PackagesRouteEnv>): Promis
     });
 
     logger.info('Created package record for manual upload', { name, version, packageId });
+
+    // Invalidate cache so Composer sees the new version immediately
+    const cache = c.get('cache');
+    if (cache) {
+      await Promise.all([
+        cache.delete(`p2:${name}`).catch(() => {}),
+        cache.delete(`p2:${name}:metadata`).catch(() => {}),
+      ]);
+      logger.debug('Invalidated cache for package', { name });
+    }
   } catch (error) {
     logger.error('Failed to create package record', { name, version }, error instanceof Error ? error : new Error(String(error)));
     return c.json(
