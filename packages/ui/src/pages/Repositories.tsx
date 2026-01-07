@@ -348,22 +348,21 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {sourceType === 'composer' && (
-            <div>
-              <label className="label">Package Filter (optional)</label>
-              <input
-                type="text"
-                value={packageFilter}
-                onChange={(e) => setPackageFilter(e.target.value)}
-                placeholder="vendor/package1, vendor/package2"
-                className="input w-full"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Comma-separated list of packages to filter. Optional - leave empty to allow all packages.
-                Packages are loaded on-demand when requested by Composer.
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="label">Package Filter (optional)</label>
+            <input
+              type="text"
+              value={packageFilter}
+              onChange={(e) => setPackageFilter(e.target.value)}
+              placeholder="vendor/*, vendor/package1"
+              className="input w-full"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              {sourceType === 'git' 
+                ? 'Packages this repo provides. Supports wildcards: "vendor/*" matches all vendor packages. Reduces API calls.'
+                : 'Filter packages with wildcards: "vendor/*" or exact names. Leave empty to allow all.'}
+            </p>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">
@@ -561,22 +560,21 @@ function EditRepositoryModal({ repository, onClose }: { repository: Repository; 
             </div>
           )}
 
-          {sourceType === 'composer' && (
-            <div>
-              <label className="label">Package Filter (optional)</label>
-              <input
-                type="text"
-                value={packageFilter}
-                onChange={(e) => setPackageFilter(e.target.value)}
-                placeholder="vendor/package1, vendor/package2"
-                className="input w-full"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Comma-separated list of packages to filter. Optional - leave empty to allow all packages.
-                Packages are loaded on-demand when requested by Composer.
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="label">Package Filter (optional)</label>
+            <input
+              type="text"
+              value={packageFilter}
+              onChange={(e) => setPackageFilter(e.target.value)}
+              placeholder="vendor/*, vendor/package1"
+              className="input w-full"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              {sourceType === 'git' 
+                ? 'Packages this repo provides. Supports wildcards: "vendor/*" matches all vendor packages. Reduces API calls.'
+                : 'Filter packages with wildcards: "vendor/*" or exact names. Leave empty to allow all.'}
+            </p>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">

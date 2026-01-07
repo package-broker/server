@@ -344,6 +344,31 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   // Try to fetch from upstream repositories (Composer and GitHub)
   for (const repo of activeRepos) {
     try {
+      // Early filter: skip repo if package_filter is set and package doesn't match
+      // This avoids unnecessary API calls to upstream repositories
+      // Supports wildcards: "mirasvit/*" matches all mirasvit packages
+      if (repo.package_filter) {
+        const patterns = repo.package_filter.split(',').map((p: string) => p.trim().toLowerCase());
+        const pkgLower = packageName.toLowerCase();
+        const matches = patterns.some((pattern: string) => {
+          if (pattern.endsWith('/*')) {
+            // Wildcard pattern: "vendor/*" matches "vendor/anything"
+            const prefix = pattern.slice(0, -1); // "vendor/"
+            return pkgLower.startsWith(prefix);
+          }
+          if (pattern.endsWith('*')) {
+            // Prefix wildcard: "mirasvit*" matches "mirasvit-module", "mirasvit/foo"
+            const prefix = pattern.slice(0, -1);
+            return pkgLower.startsWith(prefix);
+          }
+          // Exact match
+          return pkgLower === pattern;
+        });
+        if (!matches) {
+          continue; // Skip this repo - package not in filter list
+        }
+      }
+
       let packageData = null;
       
       if (repo.vcs_type === 'composer') {
