@@ -173,12 +173,13 @@ export async function packagesJsonRoute(c: Context<ComposerRouteEnv>): Promise<R
   const packagesJson = await buildPackagesJson(c);
 
   // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
+  // TTL of 1 hour ensures cache is refreshed periodically
   const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
   if (cachingEnabled && c.env.KV) {
     c.executionCtx.waitUntil(
       Promise.all([
-        c.env.KV.put(kvKey, JSON.stringify(packagesJson)).catch(() => { }),
-        c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() })).catch(() => { })
+        c.env.KV.put(kvKey, JSON.stringify(packagesJson), { expirationTtl: 3600 }).catch(() => { }),
+        c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() }), { expirationTtl: 3600 }).catch(() => { })
       ])
     );
   }
@@ -303,12 +304,13 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
     const packageData = buildP2Response(packageName, existingPackages, maxVersions);
 
     // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
+    // TTL of 1 hour ensures cache is refreshed periodically
     const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
     if (cachingEnabled && c.env.KV) {
       c.executionCtx.waitUntil(
         Promise.all([
-          c.env.KV.put(kvKey, JSON.stringify(packageData)).catch(() => { }),
-          c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() })).catch(() => { })
+          c.env.KV.put(kvKey, JSON.stringify(packageData), { expirationTtl: 3600 }).catch(() => { }),
+          c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() }), { expirationTtl: 3600 }).catch(() => { })
         ])
       );
     }
