@@ -28,13 +28,6 @@ export async function requestIdMiddleware(
   const logger = getLogger();
   logger.setRequestId(requestId);
 
-  // Log request start
-  logger.info('Request started', {
-    method: c.req.method,
-    url: c.req.url,
-    path: new URL(c.req.url).pathname,
-  });
-
   // Call next middleware/handler
   await next();
 
