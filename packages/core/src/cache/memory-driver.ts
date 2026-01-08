@@ -6,6 +6,7 @@ import type { CachePort } from '../ports';
  * Useful for development and testing, or for local deployments without Redis
  */
 export class MemoryCacheDriver implements CachePort {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private cache = new Map<string, { value: any; expiresAt?: number }>();
 
   async get(key: string): Promise<string | null> {
@@ -50,7 +51,8 @@ export class MemoryCacheDriver implements CachePort {
     // Note: ReadableStream support in memory driver is limited/not implemented for full compatibility,
     // usually we'd want to read it. For now assuming string or basic objects.
     
-    let storedValue: any = value;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const storedValue: any = value;
     
     if (value instanceof ReadableStream || value instanceof ArrayBuffer || value instanceof FormData) {
         // In a real memory implementation we might want to buffer this, 

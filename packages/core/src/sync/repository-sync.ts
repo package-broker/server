@@ -7,7 +7,7 @@
 // Main repository sync orchestrator
 
 import { createD1Database, type Database } from '../db';
-import { repositories, packages as packagesTable, artifacts } from '../db/schema';
+import { repositories, packages as packagesTable } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { decryptCredentials } from '../utils/encryption';
 import { syncGitHubRepository } from './github-sync';
@@ -15,7 +15,6 @@ import { syncComposerRepository } from './strategies/composer-repo';
 import type { SyncResult, ComposerPackage } from './types';
 import type { CredentialType } from '@package-broker/shared';
 import type { StorageDriver } from '../storage/driver';
-import { buildStorageKey } from '../storage/driver';
 import { nanoid } from 'nanoid';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';

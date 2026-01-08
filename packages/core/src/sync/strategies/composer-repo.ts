@@ -203,12 +203,13 @@ async function syncWithProviderIncludes(
       const versionsArray = Array.isArray(packageVersions)
         ? packageVersions.map((metadata) => ({ version: metadata.version || metadata.version_normalized || String(metadata), metadata }))
         : Object.entries(packageVersions).map(([key, val]) => ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             version: (val as any)?.version || (val as any)?.version_normalized || key,
             metadata: val,
           }));
       
       for (const { version, metadata } of versionsArray) {
-        let distUrl = resolveDistUrl(baseUrl, metadata.dist?.url, packageName, version);
+        const distUrl = resolveDistUrl(baseUrl, metadata.dist?.url, packageName, version);
 
         allPackages.push({
           name: packageName,
@@ -317,6 +318,7 @@ function parseComposerPackagesJson(
     const versionsArray = Array.isArray(versions)
       ? versions.map((metadata) => ({ version: metadata.version || metadata.version_normalized || String(metadata), metadata }))
       : Object.entries(versions).map(([key, val]) => ({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           version: (val as any)?.version || (val as any)?.version_normalized || key,
           metadata: val,
         }));

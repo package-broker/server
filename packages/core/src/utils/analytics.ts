@@ -90,7 +90,7 @@ class Analytics {
         doubles,
         indexes,
       });
-    } catch (error) {
+    } catch (_error) {
       // Silently fail - analytics should never break the application
       // Errors are logged but don't throw
     }

@@ -108,7 +108,7 @@ export class UserService {
 
     // 2FA Methods
 
-    async setupTwoFactor(userId: string) {
+    async setupTwoFactor(_userId: string) {
         const secret = (await import('otplib')).authenticator.generateSecret();
         // Just return secret, don't save yet until verified
         return secret;

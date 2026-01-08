@@ -20,6 +20,7 @@ export class KVCacheDriver implements CachePort {
     value: string | ReadableStream | ArrayBuffer | FormData,
     options?: { expirationTtl?: number }
   ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await this.kv.put(key, value as any, options);
   }
 

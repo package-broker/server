@@ -54,7 +54,9 @@ export interface ComposerMetadata {
     files?: string[];
   };
   bin?: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   extra?: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any; // Allow additional fields
 }
 
