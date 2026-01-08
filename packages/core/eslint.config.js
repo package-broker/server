@@ -20,6 +20,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/**/__tests__/**/*.ts', 'src/**/*.test.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // Allow 'any' in test files for mocks
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', '**/*.d.ts'],
   }
 );
