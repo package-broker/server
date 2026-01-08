@@ -32,7 +32,7 @@ const repositoryBaseSchema = z.object({
 
 // Create schema with refinement for credential validation
 export const createRepositorySchema = repositoryBaseSchema.refine(
-  (data) => data.credential_type === 'none' || Object.keys(data.auth_credentials).length > 0,
+  (data: z.infer<typeof repositoryBaseSchema>) => data.credential_type === 'none' || Object.keys(data.auth_credentials).length > 0,
   { message: 'Credentials are required unless using "none" authentication', path: ['auth_credentials'] }
 );
 
