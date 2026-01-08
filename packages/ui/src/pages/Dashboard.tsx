@@ -7,7 +7,6 @@ export function Dashboard() {
   const { data: stats, isLoading, error } = useQuery({
     queryKey: ['stats'],
     queryFn: getStats,
-    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const cards = [
