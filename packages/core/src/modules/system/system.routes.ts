@@ -26,3 +26,25 @@ export const healthRouteDef = createRoute({
   },
   tags: ['System'],
 });
+
+const sshSupportResponseSchema = z.object({
+  ssh_supported: z.boolean().describe('Whether SSH key support is available in this environment'),
+});
+
+export const sshSupportRouteDef = createRoute({
+  method: 'get',
+  path: '/ssh-support',
+  summary: 'Check SSH support',
+  description: 'Returns whether SSH key support is available in the current environment',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: sshSupportResponseSchema,
+        },
+      },
+      description: 'SSH support status',
+    },
+  },
+  tags: ['System'],
+});

@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import { createRepositorySchema, updateRepositorySchema, buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { encryptCredentials, decryptCredentials } from '../../utils/encryption';
 import { isGitHubUrl } from '../../utils/upstream-fetch';
+import { isSshSupported } from '../../utils/environment';
 import { nanoid } from 'nanoid';
 import { getAnalytics } from '../../utils/analytics';
 
@@ -52,6 +53,27 @@ export async function listRepositories(c: OpenAPIContext<RepositoriesRouteEnv>):
 
 export async function createRepository(c: OpenAPIContext<RepositoriesRouteEnv, ReturnType<typeof createRepositorySchema.parse>>): Promise<Response> {
   const validated = c.req.valid('json');
+
+  // Validate SSH key support if SSH credential type is used
+  if (validated.credential_type === 'ssh_key') {
+    if (!isSshSupported()) {
+      return c.json(
+        { 
+          error: 'Bad Request', 
+          message: 'SSH key authentication is not supported in this environment. SSH keys are only available in Node.js/Docker environments, not in Cloudflare Workers.' 
+        },
+        400
+      );
+    }
+
+    // Validate that private_key is provided
+    if (!validated.auth_credentials?.private_key) {
+      return c.json(
+        { error: 'Bad Request', message: 'SSH private key is required for SSH authentication' },
+        400
+      );
+    }
+  }
 
   if (!c.env.ENCRYPTION_KEY || typeof c.env.ENCRYPTION_KEY !== 'string') {
     return c.json(
@@ -375,6 +397,22 @@ async function validateGitHubRepository(
   encryptionKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // For SSH key authentication, skip GitHub API validation
+    // SSH validation will happen during actual sync
+    if (repo.credential_type === 'ssh_key') {
+      if (!isSshSupported()) {
+        return { 
+          success: false, 
+          error: 'SSH key authentication is not supported in this environment. SSH keys are only available in Node.js/Docker environments.' 
+        };
+      }
+      // Basic URL validation for SSH
+      if (!repo.url || (!repo.url.includes('github.com') && !repo.url.includes('git@'))) {
+        return { success: false, error: 'Invalid repository URL for SSH authentication.' };
+      }
+      return { success: true };
+    }
+
     // Validate GitHub URL using proper hostname check (security)
     if (!isGitHubUrl(repo.url)) {
       return { success: false, error: 'Invalid GitHub URL. Only github.com URLs are supported.' };

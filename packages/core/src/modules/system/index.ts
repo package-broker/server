@@ -11,7 +11,8 @@ import * as handlers from './system.handlers';
 
 const systemModule = new OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>();
 
-// Public route (no auth required)
+// Public routes (no auth required)
 systemModule.openapi(routes.healthRouteDef, handlers.healthHandler as any);
+systemModule.openapi(routes.sshSupportRouteDef, handlers.sshSupportHandler as any);
 
 export default systemModule;

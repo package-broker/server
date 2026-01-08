@@ -50,6 +50,13 @@ export const CREDENTIAL_FIELD_DEFINITIONS: Record<
     label: 'Bearer Token',
     fields: [{ name: 'token', label: 'Token', type: 'password' }],
   },
+  ssh_key: {
+    label: 'SSH Key',
+    fields: [
+      { name: 'private_key', label: 'Private Key', type: 'password' },
+      { name: 'passphrase', label: 'Passphrase (optional)', type: 'password' },
+    ],
+  },
   none: {
     label: 'No Authentication',
     fields: [],
@@ -57,16 +64,43 @@ export const CREDENTIAL_FIELD_DEFINITIONS: Record<
 };
 
 /**
- * Credential types allowed for each source type
+ * Base credential types allowed for each source type (without environment-specific types)
  * Filters the credential dropdown based on what makes sense for the source
  * 
  * Note: 'none' is allowed for public repositories (e.g., open-source GitHub repos)
  * that don't require authentication. These repos sync on-demand when packages are requested.
  */
-export const CREDENTIALS_BY_SOURCE_TYPE: Record<string, CredentialType[]> = {
+const BASE_CREDENTIALS_BY_SOURCE_TYPE: Record<string, CredentialType[]> = {
   composer: ['http_basic', 'bearer_token', 'none'],
   git: ['github_token', 'gitlab_token', 'bitbucket_app_password', 'bitbucket_api_token', 'bitbucket_api_key', 'bitbucket_server_pat', 'none'],
 };
+
+/**
+ * Get credential types allowed for each source type, including environment-specific types
+ * SSH key support is only available in Node.js environments (not Cloudflare Workers)
+ * 
+ * This function should be called at runtime to get the correct list based on environment.
+ * For UI usage, use the API endpoint to check SSH support availability.
+ */
+export function getCredentialsBySourceType(includeSsh: boolean = false): Record<string, CredentialType[]> {
+  const credentials = { ...BASE_CREDENTIALS_BY_SOURCE_TYPE };
+  
+  if (includeSsh) {
+    // Add SSH key to git credentials if supported
+    if (credentials.git && !credentials.git.includes('ssh_key')) {
+      credentials.git = [...credentials.git, 'ssh_key'];
+    }
+  }
+  
+  return credentials;
+}
+
+/**
+ * Credential types allowed for each source type
+ * @deprecated Use getCredentialsBySourceType() for environment-aware credential lists
+ * This constant is kept for backward compatibility but doesn't include SSH
+ */
+export const CREDENTIALS_BY_SOURCE_TYPE: Record<string, CredentialType[]> = BASE_CREDENTIALS_BY_SOURCE_TYPE;
 
 /**
  * Build authentication headers from credential config
@@ -107,6 +141,10 @@ export function buildAuthHeaders(
       const password = fields.password || '';
       const credentials = btoa(`${username}:${password}`);
       headers['Authorization'] = `Basic ${credentials}`;
+      break;
+    }
+    case 'ssh_key': {
+      // SSH keys are handled separately in git sync, not via HTTP headers
       break;
     }
     case 'none': {

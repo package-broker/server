@@ -11,6 +11,7 @@ export const credentialTypeSchema = z.enum([
   'bitbucket_api_key',
   'bitbucket_server_pat',
   'bearer_token',
+  'ssh_key',
   'none',
 ]);
 

@@ -327,6 +327,11 @@ export async function deletePackageVersion(name: string, version: string): Promi
   );
 }
 
+// System
+export async function checkSshSupport() {
+  return fetchApi<{ ssh_supported: boolean }>('/health/ssh-support');
+}
+
 // Settings
 export interface Settings {
   kv_available: boolean;
