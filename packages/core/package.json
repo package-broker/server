@@ -45,7 +45,7 @@
     "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251230.0",
+    "@cloudflare/workers-types": "^4.20260108.0",
     "@eslint/js": "^9.18.0",
     "@types/micromatch": "^4.0.10",
     "@types/qrcode": "^1.5.6",

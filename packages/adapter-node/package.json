@@ -19,7 +19,7 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.12.7",
-    "ioredis": "^5.8.2"
+    "ioredis": "^5.9.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
