@@ -508,6 +508,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
         });
 
         if (response.ok) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const packagistData: any = await response.json();
           const versions = packagistData.packages?.[packageName];
 
@@ -519,9 +520,11 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
             ? version.replace(/\.0(-|$)/, '$1').replace('-patch', '-p')
             : null;
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let versionData: any = null;
           if (Array.isArray(versions)) {
             // Composer 2 p2 format: array of version objects
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             versionData = versions.find((v: any) =>
               v.version === version ||
               v.version === shortVersion ||
@@ -1067,6 +1070,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
           const credentialsJson = await decryptCredentials(repo.auth_credentials, c.env.ENCRYPTION_KEY);
           const credentials = JSON.parse(credentialsJson);
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const sourceResponse = await downloadFromSource(
             sourceDistUrl,
             repo.credential_type as any,

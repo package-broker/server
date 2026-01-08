@@ -1409,7 +1409,7 @@ export async function transformPackageDistUrls(
 
       // Use existing reference or generate simple one (no expensive crypto)
       // Most Packagist packages already have dist.reference, so this is rarely needed
-      const distReference = metadata.dist?.reference || `${pkgName.replace('/', '-')}-${version}`.substring(0, 40);
+      const _distReference = metadata.dist?.reference || `${pkgName.replace('/', '-')}-${version}`.substring(0, 40);
 
       // Store RAW metadata (complete upstream package version object)
       // We'll generate clean responses from stored data, not transform on ingestion

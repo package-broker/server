@@ -11,6 +11,7 @@ import { getLogger } from '../utils/logger';
  * Health check endpoint
  * Returns 200 OK if service is healthy
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function healthRoute(c: Context<{ Variables: any }>): Promise<Response> {
   const logger = getLogger();
   logger.info('Health check requested', {
