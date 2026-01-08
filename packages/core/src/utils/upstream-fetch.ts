@@ -54,6 +54,50 @@ export function isGitHubUrl(url: string): boolean {
   }
 }
 
+/**
+ * Safely check if a URL is a valid SSH git URL (git@host:path format).
+ * Uses proper hostname validation to prevent security issues.
+ * 
+ * @param url - The SSH URL to validate (e.g., "git@github.com:owner/repo.git")
+ * @returns true if the URL is a valid SSH git URL with allowed hostname, false otherwise
+ */
+export function isSshGitUrl(url: string): boolean {
+  try {
+    // Check for SSH format: git@host:path
+    if (url.startsWith('git@')) {
+      // Parse git@host:path format
+      const match = url.match(/^git@([^:]+):(.+)$/);
+      if (!match) {
+        return false;
+      }
+      const [, hostname] = match;
+      // Validate hostname against allowed list
+      return ALLOWED_GITHUB_HOSTNAMES.includes(hostname.toLowerCase());
+    }
+    
+    // Check for ssh:// format: ssh://git@host/path
+    if (url.startsWith('ssh://')) {
+      try {
+        const parsed = new URL(url);
+        // Extract hostname from ssh://git@host format
+        const hostname = parsed.hostname || parsed.host.split('@').pop() || '';
+        return ALLOWED_GITHUB_HOSTNAMES.includes(hostname.toLowerCase());
+      } catch {
+        return false;
+      }
+    }
+    
+    // If it's an HTTPS URL, validate it using isGitHubUrl
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return isGitHubUrl(url);
+    }
+    
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export interface UpstreamRepository {
   id: string;
   url: string;

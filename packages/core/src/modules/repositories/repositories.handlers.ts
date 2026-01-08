@@ -11,7 +11,7 @@ import { repositories } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { createRepositorySchema, updateRepositorySchema, buildAuthHeaders, type CredentialType, COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { encryptCredentials, decryptCredentials } from '../../utils/encryption';
-import { isGitHubUrl } from '../../utils/upstream-fetch';
+import { isGitHubUrl, isSshGitUrl } from '../../utils/upstream-fetch';
 import { isSshSupported } from '../../utils/environment';
 import { nanoid } from 'nanoid';
 import { getAnalytics } from '../../utils/analytics';
@@ -406,9 +406,9 @@ async function validateGitHubRepository(
           error: 'SSH key authentication is not supported in this environment. SSH keys are only available in Node.js/Docker environments.' 
         };
       }
-      // Basic URL validation for SSH
-      if (!repo.url || (!repo.url.includes('github.com') && !repo.url.includes('git@'))) {
-        return { success: false, error: 'Invalid repository URL for SSH authentication.' };
+      // Validate SSH URL using proper hostname check (security)
+      if (!repo.url || !isSshGitUrl(repo.url)) {
+        return { success: false, error: 'Invalid repository URL for SSH authentication. Only GitHub URLs are supported.' };
       }
       return { success: true };
     }

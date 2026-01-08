@@ -308,11 +308,14 @@ function AddRepositoryModal({ onClose, sshSupported }: { onClose: () => void; ss
                 }}
                 className="input w-full"
               >
-                {allowedCredentialTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {CREDENTIAL_FIELD_DEFINITIONS[type]?.label || type}
-                  </option>
-                ))}
+                {allowedCredentialTypes.map((type) => {
+                  const credentialType = type as CredentialType;
+                  return (
+                    <option key={credentialType} value={credentialType}>
+                      {CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.label || credentialType}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -420,21 +423,21 @@ function EditRepositoryModal({ repository, onClose, sshSupported }: { repository
   });
 
   // Get allowed credential types for current source type, including SSH if supported
-  const baseCredentialTypes = CREDENTIALS_BY_SOURCE_TYPE[sourceType] || [];
-  const allowedCredentialTypes = sshSupported && sourceType === 'git' && !baseCredentialTypes.includes('ssh_key')
-    ? [...baseCredentialTypes, 'ssh_key']
+  const baseCredentialTypes: CredentialType[] = CREDENTIALS_BY_SOURCE_TYPE[sourceType] || [];
+  const allowedCredentialTypes: CredentialType[] = sshSupported && sourceType === 'git' && !baseCredentialTypes.includes('ssh_key')
+    ? [...baseCredentialTypes, 'ssh_key' as CredentialType]
     : baseCredentialTypes;
   const credentialFields = CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.fields || [];
 
   // Handle source type change - reset credential type to first valid option
   const handleSourceTypeChange = (newSourceType: 'git' | 'composer') => {
     setSourceType(newSourceType);
-    const baseTypes = CREDENTIALS_BY_SOURCE_TYPE[newSourceType] || [];
-    const allowed = sshSupported && newSourceType === 'git' && !baseTypes.includes('ssh_key')
-      ? [...baseTypes, 'ssh_key']
+    const baseTypes: CredentialType[] = CREDENTIALS_BY_SOURCE_TYPE[newSourceType] || [];
+    const allowed: CredentialType[] = sshSupported && newSourceType === 'git' && !baseTypes.includes('ssh_key')
+      ? [...baseTypes, 'ssh_key' as CredentialType]
       : baseTypes;
     if (allowed.length > 0 && !allowed.includes(credentialType)) {
-      setCredentialType(allowed[0]);
+      setCredentialType(allowed[0] as CredentialType);
       setCredentials({});
     }
   };
@@ -521,11 +524,14 @@ function EditRepositoryModal({ repository, onClose, sshSupported }: { repository
                 }}
                 className="input w-full"
               >
-                {allowedCredentialTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {CREDENTIAL_FIELD_DEFINITIONS[type]?.label || type}
-                  </option>
-                ))}
+                {allowedCredentialTypes.map((type) => {
+                  const credentialType = type as CredentialType;
+                  return (
+                    <option key={credentialType} value={credentialType}>
+                      {CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.label || credentialType}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

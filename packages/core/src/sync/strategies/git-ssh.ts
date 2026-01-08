@@ -127,6 +127,15 @@ function convertToSshUrl(url: string): string {
 /**
  * Clone git repository using SSH key
  */
+/**
+ * Escape a string for use in shell command (basic escaping)
+ * Only escapes single quotes and wraps in single quotes
+ */
+function escapeShellArg(arg: string): string {
+  // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 async function cloneRepository(
   url: string,
   targetPath: string,
@@ -136,14 +145,18 @@ async function cloneRepository(
   const { spawn } = await import('child_process');
   
   return new Promise((resolve, reject) => {
-    // Set up SSH command with key
-    const sshCommand = `ssh -i ${keyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes`;
+    // Set up SSH command with key - properly escape keyPath
+    // Use -i with properly escaped path to prevent command injection
+    const escapedKeyPath = escapeShellArg(keyPath);
+    const sshCommand = `ssh -i ${escapedKeyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes`;
     
     // Set environment variables
+    // Note: For passphrase-protected keys, sshpass is required
+    // The passphrase is escaped to prevent command injection
     const env = {
       ...process.env,
       GIT_SSH_COMMAND: passphrase 
-        ? `sshpass -p '${passphrase}' ${sshCommand}` 
+        ? `sshpass -p ${escapeShellArg(passphrase)} ${sshCommand}` 
         : sshCommand,
     };
 
@@ -181,25 +194,69 @@ async function cloneRepository(
 }
 
 /**
+ * Recursively find files matching a name pattern
+ * Uses Node.js APIs instead of shell commands for security
+ */
+async function findFilesRecursive(
+  dirPath: string,
+  fileName: string
+): Promise<string[]> {
+  const { readdir, stat } = await import('fs/promises');
+  const { join } = await import('path');
+  
+  const files: string[] = [];
+  
+  async function walkDir(currentPath: string): Promise<void> {
+    try {
+      const entries = await readdir(currentPath);
+      
+      for (const entry of entries) {
+        const fullPath = join(currentPath, entry);
+        try {
+          const stats = await stat(fullPath);
+          
+          if (stats.isDirectory()) {
+            await walkDir(fullPath);
+          } else if (stats.isFile() && entry === fileName) {
+            files.push(fullPath);
+          }
+        } catch {
+          // Skip files/dirs we can't access
+          continue;
+        }
+      }
+    } catch {
+      // Skip directories we can't read
+      return;
+    }
+  }
+  
+  await walkDir(dirPath);
+  return files;
+}
+
+/**
  * Find and parse composer.json files from cloned repository
  */
 async function findAndParseComposerFiles(
   repoPath: string,
   pattern: string
 ): Promise<ComposerPackage[]> {
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
-  const execAsync = promisify(exec);
-
   try {
-    // Find all composer.json files matching the pattern
-    // Use proper shell escaping for the path
-    const { stdout } = await execAsync(`find "${repoPath}" -name "composer.json" -type f`);
-    const files = stdout.trim().split('\n').filter(Boolean);
+    // Find all composer.json files using Node.js APIs (no shell commands)
+    const allFiles = await findFilesRecursive(repoPath, 'composer.json');
 
     // Filter files by glob pattern
-    const relativeFiles = files.map((file: string) => file.replace(repoPath + '/', ''));
+    // Make paths relative to repoPath for pattern matching
+    const relativeFiles = allFiles.map((file: string) => {
+      const relative = file.replace(repoPath, '').replace(/^\//, '');
+      return relative;
+    });
     const matchedFiles = micromatch(relativeFiles, pattern);
+    
+    // Convert back to full paths
+    const { join } = await import('path');
+    const fullMatchedFiles = matchedFiles.map((file: string) => join(repoPath, file));
 
     if (matchedFiles.length === 0) {
       return [];
@@ -208,11 +265,9 @@ async function findAndParseComposerFiles(
     // Parse each composer.json file
     const packages: ComposerPackage[] = [];
 
-    const { join } = await import('path');
     const { readFile } = await import('fs/promises');
 
-    for (const file of matchedFiles) {
-      const fullPath = join(repoPath, file);
+    for (const fullPath of fullMatchedFiles) {
       try {
         const content = await readFile(fullPath, 'utf-8');
         const composerJson = JSON.parse(content);
@@ -251,7 +306,7 @@ async function findAndParseComposerFiles(
           }
         }
       } catch (error) {
-        logger.warn('Failed to parse composer.json', { file, error: error instanceof Error ? error.message : String(error) });
+        logger.warn('Failed to parse composer.json', { file: fullPath, error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -266,23 +321,51 @@ async function findAndParseComposerFiles(
  * Get versions from git tags
  */
 async function getVersionsFromTags(repoPath: string): Promise<string[]> {
-  const { exec } = await import('child_process');
+  const { spawn } = await import('child_process');
   const { promisify } = await import('util');
-  const execAsync = promisify(exec);
 
   try {
-    // Use proper shell escaping for the path
-    const { stdout } = await execAsync(`cd "${repoPath}" && git tag -l`);
-    const tags = stdout.trim().split('\n').filter(Boolean);
-    
-    // Filter and sort valid semver tags
-    const versions = tags
-      .map((tag: string) => tag.replace(/^v/, '')) // Remove 'v' prefix
-      .filter((tag: string) => semver.valid(tag))
-      .sort((a: string, b: string) => semver.rcompare(a, b))
-      .slice(0, 50); // Limit to 50 versions
+    // Use spawn with cwd option instead of shell cd command for security
+    return new Promise((resolve) => {
+      const gitProcess = spawn('git', ['tag', '-l'], {
+        cwd: repoPath, // Use cwd option instead of shell cd
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
 
-    return versions;
+      let stdout = '';
+      let stderr = '';
+
+      gitProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      gitProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      gitProcess.on('close', (code) => {
+        if (code === 0) {
+          const tags = stdout.trim().split('\n').filter(Boolean);
+          
+          // Filter and sort valid semver tags
+          const versions = tags
+            .map((tag: string) => tag.replace(/^v/, '')) // Remove 'v' prefix
+            .filter((tag: string) => semver.valid(tag))
+            .sort((a: string, b: string) => semver.rcompare(a, b))
+            .slice(0, 50); // Limit to 50 versions
+
+          resolve(versions);
+        } else {
+          logger.warn('Failed to get git tags', { repoPath, stderr });
+          resolve([]);
+        }
+      });
+
+      gitProcess.on('error', (error) => {
+        logger.warn('Failed to spawn git tag process', { repoPath, error: error instanceof Error ? error.message : String(error) });
+        resolve([]);
+      });
+    });
   } catch (error) {
     logger.warn('Failed to get git tags', { repoPath, error: error instanceof Error ? error.message : String(error) });
     return [];
