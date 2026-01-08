@@ -12,6 +12,9 @@ COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies (including devDependencies for build)
 RUN npm ci
+# Workaround for npm bug with optional dependencies (https://github.com/npm/cli/issues/4828)
+# npm ci sometimes skips optional dependencies like @rollup/rollup-linux-x64-gnu
+RUN npm install --force
 
 COPY tsconfig.json ./
 COPY packages/core ./packages/core
