@@ -26,8 +26,8 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@package-broker/core": "^0.13.0",
-    "@package-broker/ui": "^0.13.0"
+    "@package-broker/core": "^0.16.2",
+    "@package-broker/ui": "^0.16.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251230.0",
