@@ -8,7 +8,7 @@ import type { OpenAPIContext } from '../../routes/api/types';
 import type { DatabasePort } from '../../ports';
 import type { AppBindings, AppVariables } from '../../factory';
 import { repositories, artifacts, packages } from '../../db/schema';
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, countDistinct } from 'drizzle-orm';
 import { updatePackagistMirroringRequestSchema } from '@package-broker/shared';
 
 export interface StatsRouteEnv {
@@ -51,7 +51,10 @@ export async function getStats(c: OpenAPIContext<StatsRouteEnv>): Promise<Respon
 
   const activeRepos = activeReposResult?.count ?? 0;
 
-  const [packagesResult] = await db.select({ count: sql<number>`count(*)` }).from(packages);
+  // Count distinct package names (unique packages, regardless of versions)
+  const [packagesResult] = await db
+    .select({ count: countDistinct(packages.name) })
+    .from(packages);
   const cachedPackages = packagesResult?.count ?? 0;
 
   const [downloadsResult] = await db
