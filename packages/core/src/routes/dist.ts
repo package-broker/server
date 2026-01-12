@@ -20,6 +20,8 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
 import { type AuthContext } from '../middleware/auth';
+import { lazyLoadPackageFromRepositories, normalizePackageVersions, storePackageInDB, deriveVersionNormalized } from './composer';
+import { computeShasum } from '../utils/checksum';
 
 export interface DistRouteEnv {
   Bindings: {
@@ -35,6 +37,62 @@ export interface DistRouteEnv {
     auth?: AuthContext;
     session?: { userId: string; email: string };
   };
+}
+
+/**
+ * Get Content-Type header based on dist.type from package metadata
+ */
+function getContentTypeForDistType(distType: string | null | undefined): string {
+  if (!distType) {
+    return 'application/zip'; // Default fallback
+  }
+  
+  const type = distType.toLowerCase();
+  
+  // Map common dist types to Content-Type headers
+  if (type === 'zip') {
+    return 'application/zip';
+  }
+  if (type === 'tar') {
+    return 'application/x-tar';
+  }
+  if (type === 'tar.gz' || type === 'tgz') {
+    return 'application/gzip';
+  }
+  if (type === 'tar.bz2') {
+    return 'application/x-bzip2';
+  }
+  
+  // Default fallback
+  return 'application/octet-stream';
+}
+
+/**
+ * Get file extension for Content-Disposition header based on dist.type
+ */
+function getFileExtensionForDistType(distType: string | null | undefined): string {
+  if (!distType) {
+    return 'zip'; // Default fallback
+  }
+  
+  const type = distType.toLowerCase();
+  
+  // Map dist types to file extensions
+  if (type === 'zip') {
+    return 'zip';
+  }
+  if (type === 'tar') {
+    return 'tar';
+  }
+  if (type === 'tar.gz' || type === 'tgz') {
+    return 'tar.gz';
+  }
+  if (type === 'tar.bz2') {
+    return 'tar.bz2';
+  }
+  
+  // Default fallback
+  return 'zip';
 }
 
 /**
@@ -165,6 +223,113 @@ async function extractAndStoreReadme(
 }
 
 /**
+ * Find version in metadata array using robust matching
+ * Handles normalized versions, display versions, v prefix, and version_normalized field
+ */
+function findVersionInMetadata(
+  versionFromUrl: string,
+  displayVersion: string,
+  normalizedVersions: Array<{ version: string; metadata: any }>
+): { version: string; metadata: any } | null {
+  for (const { version: metadataVersion, metadata } of normalizedVersions) {
+    // 1. Exact match: versionFromUrl === metadataVersion
+    if (versionFromUrl === metadataVersion) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 2. Display version match: displayVersion === metadataVersion
+    if (displayVersion === metadataVersion) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 3. Normalized match: versionFromUrl === metadata.version_normalized
+    const metadataNormalized = metadata.version_normalized;
+    if (metadataNormalized && versionFromUrl === metadataNormalized) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 4. Derived normalized match: versionFromUrl === deriveVersionNormalized(metadataVersion)
+    const derivedNormalized = deriveVersionNormalized(metadataVersion);
+    if (derivedNormalized && versionFromUrl === derivedNormalized) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 5. Display version without v: Compare displayVersion with metadataVersion after removing v prefix
+    const metadataVersionNoV = metadataVersion.startsWith('v') ? metadataVersion.slice(1) : metadataVersion;
+    if (displayVersion === metadataVersionNoV) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 6. Normalized without v: Compare normalized versions after removing v prefix
+    const versionFromUrlNoV = versionFromUrl.startsWith('v') ? versionFromUrl.slice(1) : versionFromUrl;
+    const metadataVersionNoVNormalized = deriveVersionNormalized(metadataVersionNoV);
+    if (metadataVersionNoVNormalized && versionFromUrlNoV === metadataVersionNoVNormalized) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 7. Also try comparing displayVersion with derived normalized of metadata version
+    if (derivedNormalized && displayVersion === derivedNormalized) {
+      return { version: metadataVersion, metadata };
+    }
+
+    // 8. Try reverse: derive normalized from displayVersion and compare with metadata normalized
+    const displayVersionNormalized = deriveVersionNormalized(displayVersion);
+    if (displayVersionNormalized && metadataNormalized && displayVersionNormalized === metadataNormalized) {
+      return { version: metadataVersion, metadata };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract version from URL parameter by removing archive extensions
+ * Handles: .zip, .tar, .tar.gz, .tar.bz2, etc.
+ */
+function extractVersionFromParam(versionParam: string | undefined): string {
+  if (!versionParam) return '';
+  
+  // Remove common archive extensions (order matters - check longer extensions first)
+  return versionParam
+    .replace(/\.tar\.bz2$/, '')
+    .replace(/\.tar\.gz$/, '')
+    .replace(/\.tar$/, '')
+    .replace(/\.zip$/, '');
+}
+
+/**
+ * Convert normalized version back to display version
+ * e.g., "103.0.7.0-patch8" → "103.0.7-p8"
+ * e.g., "1.2.0.0" → "1.2.0"
+ * e.g., "1.2.0.0-beta" → "1.2.0-beta"
+ */
+function normalizeVersionToDisplay(version: string): string {
+  // Handle patch versions: "103.0.7.0-patch8" → "103.0.7-p8"
+  const patchMatch = version.match(/^(\d+\.\d+\.\d+)\.0-patch(\d+)$/);
+  if (patchMatch) {
+    const [, base, patch] = patchMatch;
+    return `${base}-p${patch}`;
+  }
+
+  // Handle 4-part versions with no suffix: "1.2.0.0" → "1.2.0"
+  if (version.match(/^\d+\.\d+\.\d+\.0$/)) {
+    return version.slice(0, -2); // Remove ".0"
+  }
+
+  // Handle 4-part versions with suffix: "1.2.0.0-beta" → "1.2.0-beta"
+  const suffixMatch = version.match(/^(\d+\.\d+\.\d+)\.0(-.+)$/);
+  if (suffixMatch) {
+    const [, base, suffix] = suffixMatch;
+    return `${base}${suffix}`;
+  }
+
+  // Handle 3-part versions with trailing .0: "1.2.0" → "1.2.0" (no change)
+  // But if it's "1.2.0.0" we already handled it above
+
+  return version;
+}
+
+/**
  * GET /dist/:repo_id/:vendor/:package/:version.zip
  * OR
  * GET /dist/:vendor/:package/:version/r:reference.zip (mirror URL format)
@@ -175,21 +340,38 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
   let vendor = c.req.param('vendor');
   let pkgParam = c.req.param('package');
   let packageName: string;
-  let version = c.req.param('version')?.replace('.zip', '') || '';
+  let version = extractVersionFromParam(c.req.param('version'));
   const reference = c.req.param('reference');
 
   const db = c.get('database');
 
-  // Handle mirror URL format: /dist/:package/:version/r:reference.zip
+  // Handle old mirror URL format: /dist/:package/:version/r:reference.zip
   // In this case, repo_id and vendor/package split are not in the URL
   if (!repoId && !vendor && pkgParam) {
     const fullPackageName = pkgParam;
-    // Look up repo_id from package name
-    const [pkg] = await db
-      .select({ repo_id: packages.repo_id })
+    // Version in URL might be normalized, try both formats
+    const displayVersion = normalizeVersionToDisplay(version);
+    
+    // Look up repo_id from package name (try both version formats)
+    let [pkg] = await db
+      .select({ repo_id: packages.repo_id, version: packages.version })
       .from(packages)
       .where(and(eq(packages.name, fullPackageName), eq(packages.version, version)))
       .limit(1);
+
+    // If not found with exact version, try display version
+    if (!pkg && displayVersion !== version) {
+      [pkg] = await db
+        .select({ repo_id: packages.repo_id, version: packages.version })
+        .from(packages)
+        .where(and(eq(packages.name, fullPackageName), eq(packages.version, displayVersion)))
+        .limit(1);
+      
+      // Update version to match what's in database
+      if (pkg) {
+        version = pkg.version;
+      }
+    }
 
     if (pkg) {
       repoId = pkg.repo_id;
@@ -203,7 +385,147 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
         return c.json({ error: 'Bad Request', message: 'Invalid package name format' }, 400);
       }
     } else {
-      return c.json({ error: 'Not Found', message: 'Package not found' }, 404);
+      // Package not found in database - try lazy loading from all repositories
+      const url = new URL(c.req.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      
+      const lazyLoadResult = await lazyLoadPackageFromRepositories(
+        db,
+        fullPackageName,
+        c.env.ENCRYPTION_KEY,
+        c.env.KV
+      );
+
+      if (lazyLoadResult) {
+        const { packageData, repoId: foundRepoId } = lazyLoadResult;
+        
+        // Find the specific version in the fetched metadata
+        const versions = packageData.packages?.[fullPackageName];
+        const normalizedVersions = normalizePackageVersions(versions);
+        
+        // Try to find version using robust matching
+        const versionData = findVersionInMetadata(version, displayVersion, normalizedVersions);
+
+        if (versionData) {
+          // Store package in database with correct repo_id and source_dist_url
+          // Get file extension from dist.type
+          const distType = versionData.metadata.dist?.type || 'zip';
+          const fileExt = getFileExtensionForDistType(distType);
+          const proxyDistUrl = `${baseUrl}/dist/${foundRepoId}/${fullPackageName}/${versionData.version}.${fileExt}`;
+          const sourceDistUrl = versionData.metadata.dist?.url || null;
+          
+          await storePackageInDB(
+            db,
+            fullPackageName,
+            versionData.version,
+            versionData.metadata,
+            foundRepoId,
+            proxyDistUrl,
+            sourceDistUrl
+          );
+          
+          // Update variables to continue with archive fetching
+          repoId = foundRepoId;
+          packageName = fullPackageName;
+          version = versionData.version; // Use the version from metadata
+          
+          // Split package name for compatibility
+          const parts = fullPackageName.split('/');
+          if (parts.length === 2) {
+            vendor = parts[0];
+            pkgParam = parts[1];
+          } else {
+            return c.json({ error: 'Bad Request', message: 'Invalid package name format' }, 400);
+          }
+        } else {
+          return c.json({ error: 'Not Found', message: 'Version not found in repository' }, 404);
+        }
+      } else {
+        return c.json({ error: 'Not Found', message: 'Package not found in any repository' }, 404);
+      }
+    }
+  } else if (!repoId && vendor && pkgParam) {
+    // Handle new mirror URL format: /dist/m/:vendor/:package/:version
+    // repo_id is not in URL, but vendor and package are split
+    packageName = `${vendor}/${pkgParam}`;
+    
+    // Version in URL might be normalized (e.g., "103.0.7.0-patch8")
+    // Database stores display version (e.g., "103.0.7-p8")
+    // Try both normalized and display versions
+    const displayVersion = normalizeVersionToDisplay(version);
+    
+    // Look up repo_id from package name and version (try both formats)
+    let [pkg] = await db
+      .select({ repo_id: packages.repo_id, version: packages.version })
+      .from(packages)
+      .where(and(eq(packages.name, packageName), eq(packages.version, version)))
+      .limit(1);
+
+    // If not found with exact version, try display version
+    if (!pkg && displayVersion !== version) {
+      [pkg] = await db
+        .select({ repo_id: packages.repo_id, version: packages.version })
+        .from(packages)
+        .where(and(eq(packages.name, packageName), eq(packages.version, displayVersion)))
+        .limit(1);
+      
+      // Update version to match what's in database
+      if (pkg) {
+        version = pkg.version;
+      }
+    }
+
+    if (pkg) {
+      repoId = pkg.repo_id;
+    } else {
+      // Package not found in database - try lazy loading from all repositories
+      const url = new URL(c.req.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      
+      const lazyLoadResult = await lazyLoadPackageFromRepositories(
+        db,
+        packageName,
+        c.env.ENCRYPTION_KEY,
+        c.env.KV
+      );
+
+      if (lazyLoadResult) {
+        const { packageData, repoId: foundRepoId } = lazyLoadResult;
+        
+        // Find the specific version in the fetched metadata
+        const versions = packageData.packages?.[packageName];
+        const normalizedVersions = normalizePackageVersions(versions);
+        
+        // Try to find version using robust matching
+        const versionData = findVersionInMetadata(version, displayVersion, normalizedVersions);
+
+        if (versionData) {
+          // Store package in database with correct repo_id and source_dist_url
+          // Get file extension from dist.type
+          const distType = versionData.metadata.dist?.type || 'zip';
+          const fileExt = getFileExtensionForDistType(distType);
+          const proxyDistUrl = `${baseUrl}/dist/${foundRepoId}/${packageName}/${versionData.version}.${fileExt}`;
+          const sourceDistUrl = versionData.metadata.dist?.url || null;
+          
+          await storePackageInDB(
+            db,
+            packageName,
+            versionData.version,
+            versionData.metadata,
+            foundRepoId,
+            proxyDistUrl,
+            sourceDistUrl
+          );
+          
+          // Update variables to continue with archive fetching
+          repoId = foundRepoId;
+          version = versionData.version; // Use the version from metadata
+        } else {
+          return c.json({ error: 'Not Found', message: 'Version not found in repository' }, 404);
+        }
+      } else {
+        return c.json({ error: 'Not Found', message: 'Package not found in any repository' }, 404);
+      }
     }
   } else {
     // Standard format: /dist/:repo_id/:vendor/:package/:version
@@ -316,6 +638,12 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 offset += chunk.length;
               }
 
+              // Compute SHA-1 checksum if not already present in metadata
+              let computedShasum: string | undefined;
+              if (!versionData.dist?.shasum) {
+                computedShasum = computeShasum(combined);
+              }
+
               // Store in storage (synchronous)
               const arrayBuffer = combined.buffer.slice(
                 combined.byteOffset,
@@ -325,6 +653,56 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 await storage.put(storageKey, arrayBuffer);
                 const logger = getLogger();
                 logger.info('Successfully stored Packagist artifact in storage', { storageKey, size: totalSize, packageName, version });
+
+                // Update package metadata with shasum if computed
+                if (computedShasum) {
+                  c.executionCtx.waitUntil(
+                    (async () => {
+                      try {
+                        // Get existing package metadata
+                        const [pkg] = await db
+                          .select({ metadata: packages.metadata })
+                          .from(packages)
+                          .where(
+                            and(
+                              eq(packages.repo_id, 'packagist'),
+                              eq(packages.name, packageName),
+                              eq(packages.version, version)
+                            )
+                          )
+                          .limit(1);
+
+                        if (pkg?.metadata) {
+                          try {
+                            const metadata = JSON.parse(pkg.metadata);
+                            // Only update if shasum is missing
+                            if (!metadata.dist?.shasum) {
+                              if (!metadata.dist) {
+                                metadata.dist = {};
+                              }
+                              metadata.dist.shasum = computedShasum;
+                              
+                              await db
+                                .update(packages)
+                                .set({ metadata: JSON.stringify(metadata) })
+                                .where(
+                                  and(
+                                    eq(packages.repo_id, 'packagist'),
+                                    eq(packages.name, packageName),
+                                    eq(packages.version, version)
+                                  )
+                                );
+                            }
+                          } catch (parseError) {
+                            // Ignore parse errors
+                          }
+                        }
+                      } catch (error) {
+                        // Don't fail if metadata update fails
+                      }
+                    })()
+                  );
+                }
 
                 // Proactively extract and store README in background
                 c.executionCtx.waitUntil(
@@ -484,6 +862,23 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 offset += chunk.length;
               }
 
+              // Compute SHA-1 checksum if not already present in metadata
+              let computedShasum: string | undefined;
+              if (pkg?.metadata) {
+                try {
+                  const metadata = JSON.parse(pkg.metadata);
+                  if (!metadata.dist?.shasum) {
+                    computedShasum = computeShasum(combined);
+                  }
+                } catch {
+                  // If metadata parsing fails, compute shasum anyway
+                  computedShasum = computeShasum(combined);
+                }
+              } else {
+                // No metadata, compute shasum
+                computedShasum = computeShasum(combined);
+              }
+
               // Store in storage (synchronous)
               const arrayBuffer = combined.buffer.slice(
                 combined.byteOffset,
@@ -491,6 +886,38 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
               );
               try {
                 await storage.put(storageKey, arrayBuffer);
+                
+                // Update package metadata with shasum if computed
+                if (computedShasum && pkg) {
+                  c.executionCtx.waitUntil(
+                    (async () => {
+                      try {
+                        const metadata = pkg.metadata ? JSON.parse(pkg.metadata) : {};
+                        // Only update if shasum is missing
+                        if (!metadata.dist?.shasum) {
+                          if (!metadata.dist) {
+                            metadata.dist = {};
+                          }
+                          metadata.dist.shasum = computedShasum;
+                          
+                          await db
+                            .update(packages)
+                            .set({ metadata: JSON.stringify(metadata) })
+                            .where(
+                              and(
+                                eq(packages.repo_id, 'packagist'),
+                                eq(packages.name, packageName),
+                                eq(packages.version, version)
+                              )
+                            );
+                        }
+                      } catch (parseError) {
+                        // Ignore parse errors
+                      }
+                    })()
+                  );
+                }
+                
                 // Proactively extract and store README
                 c.executionCtx.waitUntil(
                   extractAndStoreReadme(
@@ -585,11 +1012,39 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
       c.executionCtx.waitUntil(updateDownloadCount());
     }
 
+    // Get dist.type from package metadata to determine Content-Type
+    let distType: string | null = null;
+    if (artifact) {
+      // Try to get dist.type from stored package metadata
+      const [pkgForType] = await db
+        .select({ metadata: packages.metadata })
+        .from(packages)
+        .where(
+          and(
+            eq(packages.repo_id, 'packagist'),
+            eq(packages.name, packageName),
+            eq(packages.version, version)
+          )
+        )
+        .limit(1);
+      
+      if (pkgForType?.metadata) {
+        try {
+          const metadata = JSON.parse(pkgForType.metadata);
+          distType = metadata.dist?.type || null;
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+    
     // Build response headers
     const headers = new Headers();
-    headers.set('Content-Type', 'application/zip');
-    // Format filename as vendor--module-name--version.zip (replace / with --)
-    const filename = `${packageName.replace('/', '--')}--${version}.zip`;
+    const contentType = getContentTypeForDistType(distType);
+    const fileExt = getFileExtensionForDistType(distType);
+    headers.set('Content-Type', contentType);
+    // Format filename as vendor--module-name--version.{ext} (replace / with --)
+    const filename = `${packageName.replace('/', '--')}--${version}.${fileExt}`;
     headers.set('Content-Disposition', `attachment; filename="${filename}"`);
 
     if (artifact?.size) {
@@ -714,8 +1169,10 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
           );
 
           if (sourceResponse.ok && sourceResponse.body) {
+            // Get dist.type from packageVersion metadata
+            const distType = packageVersion.dist?.type || null;
             const headers = new Headers();
-            headers.set('Content-Type', 'application/zip');
+            headers.set('Content-Type', getContentTypeForDistType(distType));
             headers.set('Cache-Control', 'public, max-age=3600');
 
             return new Response(sourceResponse.body, {
@@ -827,6 +1284,23 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
       // Create stream for response
       stream = new Response(combined).body;
 
+      // Compute SHA-1 checksum if not already present in metadata
+      let computedShasum: string | undefined;
+      if (pkg?.metadata) {
+        try {
+          const metadata = JSON.parse(pkg.metadata);
+          if (!metadata.dist?.shasum) {
+            computedShasum = computeShasum(combined);
+          }
+        } catch {
+          // If metadata parsing fails, compute shasum anyway
+          computedShasum = computeShasum(combined);
+        }
+      } else {
+        // No metadata, compute shasum
+        computedShasum = computeShasum(combined);
+      }
+
       // Store in storage (background)
       c.executionCtx.waitUntil(
         (async () => {
@@ -841,6 +1315,33 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
             await storage.put(storageKey, arrayBuffer);
             const logger = getLogger();
             logger.info('Successfully stored artifact on-demand', { storageKey, size: totalSize });
+
+            // Update package metadata with shasum if computed
+            if (computedShasum && pkg) {
+              try {
+                const metadata = pkg.metadata ? JSON.parse(pkg.metadata) : {};
+                // Only update if shasum is missing
+                if (!metadata.dist?.shasum) {
+                  if (!metadata.dist) {
+                    metadata.dist = {};
+                  }
+                  metadata.dist.shasum = computedShasum;
+                  
+                  await db
+                    .update(packages)
+                    .set({ metadata: JSON.stringify(metadata) })
+                    .where(
+                      and(
+                        eq(packages.repo_id, repoId),
+                        eq(packages.name, packageName),
+                        eq(packages.version, version)
+                      )
+                    );
+                }
+              } catch (parseError) {
+                // Ignore parse errors
+              }
+            }
 
             // Create or update artifact record
             const now = Math.floor(Date.now() / 1000);
@@ -928,10 +1429,23 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
     );
   }
 
+  // Get dist.type from package metadata to determine Content-Type
+  let distType: string | null = null;
+  if (pkg?.metadata) {
+    try {
+      const metadata = JSON.parse(pkg.metadata);
+      distType = metadata.dist?.type || null;
+    } catch {
+      // Ignore parse errors
+    }
+  }
+  
   // Build response
   const headers = new Headers();
-  headers.set('Content-Type', 'application/zip');
-  const filename = `${packageName.replace('/', '--')}--${version}.zip`;
+  const contentType = getContentTypeForDistType(distType);
+  const fileExt = getFileExtensionForDistType(distType);
+  headers.set('Content-Type', contentType);
+  const filename = `${packageName.replace('/', '--')}--${version}.${fileExt}`;
   headers.set('Content-Disposition', `attachment; filename="${filename}"`);
 
   if (artifact?.size) {
