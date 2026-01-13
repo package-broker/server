@@ -620,9 +620,11 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                                 );
                             }
                           } catch {
+                            // Ignore metadata update errors in background task
                           }
                         }
                       } catch {
+                        // Ignore background task errors
                       }
                     })()
                   );
@@ -784,6 +786,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                     computedShasum = computeShasum(combined);
                   }
                 } catch {
+                  // If metadata parsing fails, compute shasum anyway
                   computedShasum = computeShasum(combined);
                 }
               } else {
@@ -820,6 +823,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                             );
                         }
                       } catch {
+                        // Ignore metadata update errors in background task
                       }
                     })()
                   );
@@ -1178,6 +1182,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
             computedShasum = computeShasum(combined);
           }
         } catch {
+          // If metadata parsing fails, compute shasum anyway
           computedShasum = computeShasum(combined);
         }
       } else {
@@ -1217,6 +1222,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                     );
                 }
               } catch {
+                // Ignore metadata update errors in background task
               }
             }
 
@@ -1309,6 +1315,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
       const metadata = JSON.parse(pkg.metadata);
       distType = metadata.dist?.type || null;
     } catch {
+      // Ignore invalid JSON; fallback to null distType
     }
   }
   

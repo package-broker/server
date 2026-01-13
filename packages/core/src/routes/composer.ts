@@ -651,6 +651,7 @@ export function buildP2Response(
       try {
         fullMetadata = JSON.parse(pkg.metadata);
       } catch {
+        // Ignore invalid JSON; use fallback metadata
       }
     }
 
@@ -706,6 +707,7 @@ export function buildP2Response(
           versionDataBase.license = license;
         }
       } catch {
+        // Ignore license processing errors; use original value
         versionDataBase.license = pkg.license;
       }
     }
