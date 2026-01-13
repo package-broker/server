@@ -36,7 +36,7 @@ export interface ComposerRouteEnv {
 }
 
 /** Default maximum versions per package to avoid CPU timeout on Cloudflare Workers */
-const DEFAULT_MAX_VERSIONS = 50;
+export const DEFAULT_MAX_VERSIONS = 50;
 
 /**
  * Schedule background storage of package data.
@@ -200,6 +200,138 @@ export async function packagesJsonRoute(c: Context<ComposerRouteEnv>): Promise<R
   return new Response(JSON.stringify(packagesJson), { status: 200, headers });
 }
 
+function sortRepositoriesByPriority(repos: Array<typeof repositories.$inferSelect>): Array<typeof repositories.$inferSelect> {
+  return [...repos].sort((a, b) => {
+    if (a.id === 'manual' && b.id !== 'manual') return -1;
+    if (a.id !== 'manual' && b.id === 'manual') return 1;
+    
+    if (a.id === 'packagist' && b.id !== 'packagist') return 1;
+    if (a.id !== 'packagist' && b.id === 'packagist') return -1;
+    
+    return (a.created_at || 0) - (b.created_at || 0);
+  });
+}
+
+function matchesPackageFilter(packageName: string, filter: string | null): boolean {
+  if (!filter) return true;
+  
+  const patterns = filter.split(',').map((p: string) => p.trim().toLowerCase());
+  const pkgLower = packageName.toLowerCase();
+  
+  return patterns.some((pattern: string) => {
+    if (pattern.endsWith('/*')) {
+      const prefix = pattern.slice(0, -1);
+      return pkgLower.startsWith(prefix);
+    }
+    if (pattern.endsWith('*')) {
+      const prefix = pattern.slice(0, -1);
+      return pkgLower.startsWith(prefix);
+    }
+    return pkgLower === pattern;
+  });
+}
+
+/**
+ * Lazy load package metadata from all available repositories
+ * Returns package data and repo_id if found, null otherwise
+ */
+export async function lazyLoadPackageFromRepositories(
+  db: DatabasePort,
+  packageName: string,
+  encryptionKey: string,
+  kv?: KVNamespace | null
+): Promise<{ packageData: any; repoId: string } | null> {
+  const allRepos = await db
+    .select()
+    .from(repositories)
+    .where(inArray(repositories.status, ['active', 'pending', 'syncing']));
+
+  const sortedRepos = sortRepositoriesByPriority(allRepos);
+
+  for (const repo of sortedRepos) {
+    try {
+      if (!matchesPackageFilter(packageName, repo.package_filter)) {
+        continue;
+      }
+
+      let packageData = null;
+      
+      if (repo.vcs_type === 'composer') {
+        const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
+        packageData = await fetchPackageFromUpstream(
+          {
+            id: repo.id,
+            url: repo.url,
+            vcs_type: repo.vcs_type,
+            credential_type: repo.credential_type,
+            auth_credentials: repo.auth_credentials,
+            package_filter: repo.package_filter,
+          },
+          packageName,
+          encryptionKey
+        );
+      } else if (repo.vcs_type === 'git') {
+        const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
+        
+        if (!isGitHubUrl(repo.url)) {
+          continue;
+        }
+        packageData = await fetchPackageFromGitHub(
+          {
+            id: repo.id,
+            url: repo.url,
+            vcs_type: repo.vcs_type,
+            credential_type: repo.credential_type,
+            auth_credentials: repo.auth_credentials,
+            package_filter: repo.package_filter,
+          },
+          packageName,
+          encryptionKey
+        );
+      }
+
+      if (packageData) {
+        return { packageData, repoId: repo.id };
+      }
+    } catch (error) {
+      const logger = getLogger();
+      logger.warn('Error fetching package from repo', { 
+        packageName, 
+        repoId: repo.id, 
+        vcsType: repo.vcs_type,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  const { isPackagistMirroringEnabled } = await import('../modules/admin');
+  const mirroringEnabled = await isPackagistMirroringEnabled(kv);
+  
+  if (mirroringEnabled) {
+    try {
+      const packagistUrl = `https://repo.packagist.org/p2/${packageName}.json`;
+      const response = await fetch(packagistUrl, {
+        headers: {
+          'User-Agent': COMPOSER_USER_AGENT,
+        },
+      });
+      
+      if (response.ok) {
+        const packageData = await response.json();
+        return { packageData, repoId: 'packagist' };
+      }
+    } catch (error) {
+      const logger = getLogger();
+      logger.warn('Error fetching from Packagist', { 
+        packageName,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  return null;
+}
+
 /**
  * GET /p2/:vendor/:package.json
  * Serve individual package metadata (Composer 2 provider format)
@@ -299,7 +431,9 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   if (existingPackages.length > 0) {
     // Build response from database packages
     const maxVersions = getMaxVersions(c.env);
-    const packageData = buildP2Response(packageName, existingPackages, maxVersions);
+    const url = new URL(c.req.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+    const packageData = buildP2Response(packageName, existingPackages, maxVersions, baseUrl);
 
     // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
     const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
@@ -332,134 +466,51 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   }
 
   // Not in database - try lazy loading from upstream repositories
-  const activeRepos = await db
-    .select()
-    .from(repositories)
-    .where(eq(repositories.status, 'active'));
-
   const url = new URL(c.req.url);
   const baseUrl = `${url.protocol}//${url.host}`;
   const maxVersions = getMaxVersions(c.env);
 
-  // Try to fetch from upstream repositories (Composer and GitHub)
-  for (const repo of activeRepos) {
-    try {
-      // Early filter: skip repo if package_filter is set and package doesn't match
-      // This avoids unnecessary API calls to upstream repositories
-      // Supports wildcards: "mirasvit/*" matches all mirasvit packages
-      if (repo.package_filter) {
-        const patterns = repo.package_filter.split(',').map((p: string) => p.trim().toLowerCase());
-        const pkgLower = packageName.toLowerCase();
-        const matches = patterns.some((pattern: string) => {
-          if (pattern.endsWith('/*')) {
-            // Wildcard pattern: "vendor/*" matches "vendor/anything"
-            const prefix = pattern.slice(0, -1); // "vendor/"
-            return pkgLower.startsWith(prefix);
-          }
-          if (pattern.endsWith('*')) {
-            // Prefix wildcard: "mirasvit*" matches "mirasvit-module", "mirasvit/foo"
-            const prefix = pattern.slice(0, -1);
-            return pkgLower.startsWith(prefix);
-          }
-          // Exact match
-          return pkgLower === pattern;
-        });
-        if (!matches) {
-          continue; // Skip this repo - package not in filter list
-        }
-      }
+  const lazyLoadResult = await lazyLoadPackageFromRepositories(
+    db,
+    packageName,
+    c.env.ENCRYPTION_KEY,
+    c.env.KV
+  );
 
-      let packageData = null;
-      
-      if (repo.vcs_type === 'composer') {
-        // Fetch from Composer repository (Satis, Private Packagist, etc.)
-        const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
-        packageData = await fetchPackageFromUpstream(
-          {
-            id: repo.id,
-            url: repo.url,
-            vcs_type: repo.vcs_type,
-            credential_type: repo.credential_type,
-            auth_credentials: repo.auth_credentials,
-            package_filter: repo.package_filter,
-          },
-          packageName,
-          c.env.ENCRYPTION_KEY
-        );
-      } else if (repo.vcs_type === 'git') {
-        // Fetch from GitHub repository (public or private)
-        const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
-        
-        // Validate GitHub URL using proper hostname check (security)
-        if (!isGitHubUrl(repo.url)) {
-          // Skip non-GitHub git repos (e.g., GitLab, Bitbucket - not yet supported)
-          continue;
-        }
-        packageData = await fetchPackageFromGitHub(
-          {
-            id: repo.id,
-            url: repo.url,
-            vcs_type: repo.vcs_type,
-            credential_type: repo.credential_type,
-            auth_credentials: repo.auth_credentials,
-            package_filter: repo.package_filter,
-          },
-          packageName,
-          c.env.ENCRYPTION_KEY
-        );
-      }
+  if (lazyLoadResult) {
+    const { packageData, repoId } = lazyLoadResult;
+    const transformedData = transformDistUrlsInMemory(packageData, repoId, baseUrl, maxVersions);
 
-      if (packageData) {
-        const transformedData = transformDistUrlsInMemory(packageData, repo.id, baseUrl, maxVersions);
+    // Store package versions in background
+    schedulePackageStorage(c, packageName, packageData, repoId, baseUrl);
 
-        // Store package versions in background
-        schedulePackageStorage(c, packageName, packageData, repo.id, baseUrl);
+    // Track metadata request (cache miss, from upstream)
+    const analytics = getAnalytics();
+    const requestId = c.get('requestId') as string | undefined;
+    const packageCount = transformedData.packages?.[packageName] ? Object.keys(transformedData.packages[packageName]).length : 0;
+    analytics.trackPackageMetadataRequest({
+      requestId,
+      cacheHit: false,
+      packageCount,
+    });
 
-        // Track metadata request (cache miss, from upstream)
-        const analytics = getAnalytics();
-        const requestId = c.get('requestId') as string | undefined;
-        const packageCount = transformedData.packages?.[packageName] ? Object.keys(transformedData.packages[packageName]).length : 0;
-        analytics.trackPackageMetadataRequest({
-          requestId,
-          cacheHit: false,
-          packageCount,
-        });
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    headers.set('Last-Modified', new Date().toUTCString());
+    headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    headers.set('X-Cache', 'MISS-UPSTREAM');
 
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        headers.set('Last-Modified', new Date().toUTCString());
-        headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
-        headers.set('X-Cache', 'MISS-UPSTREAM');
-
-        return new Response(JSON.stringify(transformedData), { status: 200, headers });
-      }
-    } catch (error) {
-      const logger = getLogger();
-      logger.warn('Error fetching package from repo', { 
-        packageName, 
-        repoId: repo.id, 
-        vcsType: repo.vcs_type,
-        error: error instanceof Error ? error.message : String(error) 
-      });
-      // Continue to next repository
-    }
+    return new Response(JSON.stringify(transformedData), { status: 200, headers });
   }
 
-  // Not found in any upstream repo - check if Packagist mirroring is enabled
-  const mirroringEnabled = await isPackagistMirroringEnabled(c.env.KV);
-
-  if (!mirroringEnabled) {
-    return c.json(
-      {
-        error: 'Not Found',
-        message: 'Package not found. Public Packagist mirroring is disabled.',
-      },
-      404
-    );
-  }
-
-  // Proxy to public Packagist
-  return proxyToPackagist(c, packageName);
+  // Not found in any repository (including Packagist)
+  return c.json(
+    {
+      error: 'Not Found',
+      message: 'Package not found in any repository.',
+    },
+    404
+  );
 }
 
 /**
@@ -510,15 +561,53 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
     if (!packagesMap[pkg.name]) {
       packagesMap[pkg.name] = {};
     }
-    // Use dist_url (proxy URL) and transform to mirror format
-    // source_dist_url is the original external URL - don't expose it to clients
+    
+    // Preserve original dist from metadata - do NOT modify dist.url or dist.type
+    let dist: any;
+    if (pkg.metadata) {
+      try {
+        const metadata = JSON.parse(pkg.metadata);
+        if (metadata.dist && typeof metadata.dist === 'object' && !Array.isArray(metadata.dist)) {
+          // Use original dist from upstream metadata exactly as-is
+          dist = { ...metadata.dist };
+        } else {
+          // Fallback: create minimal dist if metadata doesn't have dist
+          dist = {
+            type: 'zip',
+            url: pkg.source_dist_url || transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
+          };
+        }
+      } catch {
+        // If metadata parsing fails, use fallback
+        dist = {
+          type: 'zip',
+          url: pkg.source_dist_url || transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
+        };
+      }
+    } else {
+      // No metadata available - use fallback
+      dist = {
+        type: 'zip',
+        url: pkg.source_dist_url || transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
+      };
+    }
+
+    // Add mirrors section to dist object if not already present
+    // This ensures Composer can use the mirror while preserving original dist.url
+    // This prevents Composer from treating packages as upgrades when dist.url differs
+    if (!dist.mirrors || !Array.isArray(dist.mirrors) || dist.mirrors.length === 0) {
+      dist.mirrors = [
+        {
+          url: `${baseUrl}/dist/m/%package%/%version%.%type%`,
+          preferred: true,
+        },
+      ];
+    }
+    
     packagesMap[pkg.name][pkg.version] = {
       name: pkg.name,
       version: pkg.version,
-      dist: {
-        type: 'zip',
-        url: transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
-      },
+      dist,
     };
   }
 
@@ -534,7 +623,8 @@ async function buildPackagesJson(c: Context<ComposerRouteEnv>): Promise<Composer
 export function buildP2Response(
   packageName: string,
   packageVersions: Array<typeof packages.$inferSelect>,
-  maxVersions: number = DEFAULT_MAX_VERSIONS
+  maxVersions: number = DEFAULT_MAX_VERSIONS,
+  baseUrl?: string
 ): ComposerP2Response {
   // Apply version limiting to DB records as well
   // Convert to normalized format for limiting
@@ -555,21 +645,42 @@ export function buildP2Response(
   const versions: any[] = [];
 
   for (const pkg of filteredPackageVersions) {
-    const dist: any = {
-      type: 'zip',
-      url: transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
-    };
-    if (pkg.dist_reference) {
-      dist.reference = pkg.dist_reference;
-    }
-
     let fullMetadata: any = null;
 
     if (pkg.metadata) {
       try {
         fullMetadata = JSON.parse(pkg.metadata);
       } catch {
+        // Ignore invalid JSON; use fallback metadata
       }
+    }
+
+    // Preserve original dist from metadata - do NOT modify dist.url or dist.type
+    let dist: any;
+    if (fullMetadata?.dist && typeof fullMetadata.dist === 'object' && !Array.isArray(fullMetadata.dist)) {
+      // Use original dist from upstream metadata exactly as-is
+      dist = { ...fullMetadata.dist };
+    } else {
+      // Fallback: only create minimal dist if metadata doesn't exist (shouldn't happen in practice)
+      dist = {
+        type: 'zip',
+        url: pkg.source_dist_url || transformDistUrlToMirrorFormat(pkg.dist_url) || pkg.dist_url,
+      };
+      if (pkg.dist_reference) {
+        dist.reference = pkg.dist_reference;
+      }
+    }
+
+    // Add mirrors section to dist object if not already present
+    // This ensures Composer can use the mirror while preserving original dist.url
+    // This prevents Composer from treating packages as upgrades when dist.url differs
+    if (baseUrl && (!dist.mirrors || !Array.isArray(dist.mirrors) || dist.mirrors.length === 0)) {
+      dist.mirrors = [
+        {
+          url: `${baseUrl}/dist/m/%package%/%version%.%type%`,
+          preferred: true,
+        },
+      ];
     }
 
     const displayVersion: string =
@@ -596,6 +707,7 @@ export function buildP2Response(
           versionDataBase.license = license;
         }
       } catch {
+        // Ignore license processing errors; use original value
         versionDataBase.license = pkg.license;
       }
     }
@@ -622,13 +734,6 @@ export function buildP2Response(
             url: fullMetadata.source.url,
             ...(fullMetadata.source.reference && { reference: fullMetadata.source.reference }),
           };
-        }
-
-        if (fullMetadata.dist?.type && fullMetadata.dist.type !== 'zip') {
-          dist.type = fullMetadata.dist.type;
-        }
-        if (fullMetadata.dist?.shasum) {
-          dist.shasum = fullMetadata.dist.shasum;
         }
         if (fullMetadata.require && typeof fullMetadata.require === 'object' && !Array.isArray(fullMetadata.require)) {
           versionDataBase.require = fullMetadata.require;
@@ -702,24 +807,59 @@ export function buildP2Response(
   };
 }
 
-function deriveVersionNormalized(version: string): string | undefined {
+export function deriveVersionNormalized(version: string): string | undefined {
   const v = version.startsWith('v') ? version.slice(1) : version;
 
+  // Handle patch versions (e.g., "103.0.7-p8" → "103.0.7.0-patch8")
   const patchMatch = v.match(/^(\d+\.\d+\.\d+)-p(\d+)$/);
   if (patchMatch) {
     const [, base, patch] = patchMatch;
     return `${base}.0-patch${patch}`;
   }
 
-  const numericMatch = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?$/);
-  if (numericMatch) {
-    const major = numericMatch[1];
-    const minor = numericMatch[2] ?? '0';
-    const patch = numericMatch[3] ?? '0';
-    const build = numericMatch[4] ?? '0';
-    return `${major}.${minor}.${patch}.${build}`;
+  // Explicit parser avoids regex backtracking and ReDoS concerns:
+  // 1. Parse up to 4 numeric segments separated by dots from the start of the string.
+  // 2. Treat everything after the parsed numeric part as the suffix (e.g., "-beta", "-alpha", "-dev").
+  let index = 0;
+  const length = v.length;
+  const segments: string[] = [];
+
+  while (index < length && segments.length < 4) {
+    const start = index;
+    // Read a numeric segment
+    while (index < length) {
+      const ch = v.charCodeAt(index);
+      if (ch < 48 || ch > 57) { // not '0'–'9'
+        break;
+      }
+      index++;
+    }
+    if (index === start) {
+      // No digits found where a segment was expected
+      break;
+    }
+    segments.push(v.slice(start, index));
+
+    // If we have 4 segments or we've reached the end, stop
+    if (segments.length === 4 || index >= length) {
+      break;
+    }
+
+    // Expect a dot between segments; if not present, stop parsing numeric part
+    if (v[index] === '.') {
+      index++;
+      continue;
+    }
+    break;
   }
 
+  if (segments.length > 0) {
+    const [major, minor = '0', patch = '0', build = '0'] = segments;
+    const suffix = v.slice(index); // everything after the numeric part
+    return `${major}.${minor}.${patch}.${build}${suffix}`;
+  }
+
+  // Fallback: return undefined for non-standard versions
   return undefined;
 }
 
@@ -1086,17 +1226,35 @@ function transformDistUrlsInMemory(
           : deriveVersionNormalized(version);
 
       // Build transformed version with original display version
+      // Preserve original dist from metadata - do NOT modify dist.url or dist.type
+      let dist = metadata.dist || {
+        type: 'zip',
+        url: `${proxyBaseUrl}/dist/m/${pkgName}/${version}.zip`,
+        reference: distReference,
+      };
+
+      // Add mirrors section to dist object if not already present
+      // This ensures Composer can use the mirror while preserving original dist.url
+      // This prevents Composer from treating packages as upgrades when dist.url differs
+      if (!dist.mirrors || !Array.isArray(dist.mirrors) || dist.mirrors.length === 0) {
+        dist = {
+          ...dist,
+          mirrors: [
+            {
+              url: `${proxyBaseUrl}/dist/m/%package%/%version%.%type%`,
+              preferred: true,
+            },
+          ],
+        };
+      }
+
       const versionData: any = {
         ...metadata,
         name: pkgName,
         version,
         ...(normalizedVersion ? { version_normalized: normalizedVersion } : {}),
-        dist: {
-          ...metadata.dist,
-          type: metadata.dist?.type || 'zip',
-          url: `${proxyBaseUrl}/dist/m/${pkgName}/${version}.zip`,
-          reference: distReference,
-        },
+        // Use dist with mirrors section
+        dist,
       };
 
       // Clean invalid source field if present
@@ -1124,7 +1282,7 @@ function transformDistUrlsInMemory(
   return result;
 }
 
-function normalizePackageVersions(versions: any): Array<{ version: string; metadata: any }> {
+export function normalizePackageVersions(versions: any): Array<{ version: string; metadata: any }> {
   if (Array.isArray(versions)) {
     return versions.map((metadata) => ({
       // Use original `version` field, NOT `version_normalized`
