@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildP2Response } from '../routes/composer';
+import { buildP2Response, DEFAULT_MAX_VERSIONS } from '../routes/composer';
 import type { packages } from '../db/schema';
 
 // Mock logger
@@ -61,7 +61,7 @@ describe('Composer p2 Response Generation', () => {
         }),
       ];
 
-      const result = buildP2Response(packageName, mockPackages);
+      const result = buildP2Response(packageName, mockPackages, DEFAULT_MAX_VERSIONS, 'https://proxy.example.com');
       const version = result.packages[packageName].find(v => v.version === '1.0.0');
 
       expect(version).toBeDefined();
@@ -69,8 +69,12 @@ describe('Composer p2 Response Generation', () => {
       expect(version!.version).toBe('1.0.0');
       expect(version!.dist).toBeDefined();
       expect(version!.dist.type).toBe('zip');
-      // buildP2Response uses the proxy URL (dist_url) which is set in createMockPackage
-      expect(version!.dist.url).toContain('https://proxy.example.com/dist/');
+      // buildP2Response preserves original dist.url from metadata
+      expect(version!.dist.url).toBe('https://example.com/package.zip');
+      // Mirrors section contains the proxy URL
+      expect(version!.dist.mirrors).toBeDefined();
+      expect(Array.isArray(version!.dist.mirrors)).toBe(true);
+      expect(version!.dist.mirrors![0].url).toContain('https://proxy.example.com/dist/');
       expect(version!.dist.reference).toBe('abc123');
     });
 
