@@ -200,9 +200,39 @@ export async function packagesJsonRoute(c: Context<ComposerRouteEnv>): Promise<R
   return new Response(JSON.stringify(packagesJson), { status: 200, headers });
 }
 
+function sortRepositoriesByPriority(repos: Array<typeof repositories.$inferSelect>): Array<typeof repositories.$inferSelect> {
+  return [...repos].sort((a, b) => {
+    if (a.id === 'manual' && b.id !== 'manual') return -1;
+    if (a.id !== 'manual' && b.id === 'manual') return 1;
+    
+    if (a.id === 'packagist' && b.id !== 'packagist') return 1;
+    if (a.id !== 'packagist' && b.id === 'packagist') return -1;
+    
+    return (a.created_at || 0) - (b.created_at || 0);
+  });
+}
+
+function matchesPackageFilter(packageName: string, filter: string | null): boolean {
+  if (!filter) return true;
+  
+  const patterns = filter.split(',').map((p: string) => p.trim().toLowerCase());
+  const pkgLower = packageName.toLowerCase();
+  
+  return patterns.some((pattern: string) => {
+    if (pattern.endsWith('/*')) {
+      const prefix = pattern.slice(0, -1);
+      return pkgLower.startsWith(prefix);
+    }
+    if (pattern.endsWith('*')) {
+      const prefix = pattern.slice(0, -1);
+      return pkgLower.startsWith(prefix);
+    }
+    return pkgLower === pattern;
+  });
+}
+
 /**
  * Lazy load package metadata from all available repositories
- * Respects repository order: manual uploads first, then by created_at, Packagist last
  * Returns package data and repo_id if found, null otherwise
  */
 export async function lazyLoadPackageFromRepositories(
@@ -211,62 +241,22 @@ export async function lazyLoadPackageFromRepositories(
   encryptionKey: string,
   kv?: KVNamespace | null
 ): Promise<{ packageData: any; repoId: string } | null> {
-  // Check all repositories that can serve packages (active, pending, syncing)
-  // Exclude only 'error' status (credentials invalid or connection failed)
   const allRepos = await db
     .select()
     .from(repositories)
     .where(inArray(repositories.status, ['active', 'pending', 'syncing']));
 
-  // Sort repositories by priority:
-  // 1. Manual uploads first (repo_id = 'manual')
-  // 2. Then by created_at (ascending - older repos first)
-  // 3. Packagist last (repo_id = 'packagist')
-  const sortedRepos = [...allRepos].sort((a, b) => {
-    // Manual uploads first
-    if (a.id === 'manual' && b.id !== 'manual') return -1;
-    if (a.id !== 'manual' && b.id === 'manual') return 1;
-    
-    // Packagist last
-    if (a.id === 'packagist' && b.id !== 'packagist') return 1;
-    if (a.id !== 'packagist' && b.id === 'packagist') return -1;
-    
-    // Otherwise sort by created_at (ascending - older first)
-    return (a.created_at || 0) - (b.created_at || 0);
-  });
+  const sortedRepos = sortRepositoriesByPriority(allRepos);
 
-  // Try to fetch from upstream repositories (Composer and GitHub)
   for (const repo of sortedRepos) {
     try {
-      // Early filter: skip repo if package_filter is set and package doesn't match
-      // This avoids unnecessary API calls to upstream repositories
-      // Supports wildcards: "mirasvit/*" matches all mirasvit packages
-      if (repo.package_filter) {
-        const patterns = repo.package_filter.split(',').map((p: string) => p.trim().toLowerCase());
-        const pkgLower = packageName.toLowerCase();
-        const matches = patterns.some((pattern: string) => {
-          if (pattern.endsWith('/*')) {
-            // Wildcard pattern: "vendor/*" matches "vendor/anything"
-            const prefix = pattern.slice(0, -1); // "vendor/"
-            return pkgLower.startsWith(prefix);
-          }
-          if (pattern.endsWith('*')) {
-            // Prefix wildcard: "mirasvit*" matches "mirasvit-module", "mirasvit/foo"
-            const prefix = pattern.slice(0, -1);
-            return pkgLower.startsWith(prefix);
-          }
-          // Exact match
-          return pkgLower === pattern;
-        });
-        if (!matches) {
-          continue; // Skip this repo - package not in filter list
-        }
+      if (!matchesPackageFilter(packageName, repo.package_filter)) {
+        continue;
       }
 
       let packageData = null;
       
       if (repo.vcs_type === 'composer') {
-        // Fetch from Composer repository (Satis, Private Packagist, etc.)
         const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
         packageData = await fetchPackageFromUpstream(
           {
@@ -281,12 +271,9 @@ export async function lazyLoadPackageFromRepositories(
           encryptionKey
         );
       } else if (repo.vcs_type === 'git') {
-        // Fetch from GitHub repository (public or private)
         const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
         
-        // Validate GitHub URL using proper hostname check (security)
         if (!isGitHubUrl(repo.url)) {
-          // Skip non-GitHub git repos (e.g., GitLab, Bitbucket - not yet supported)
           continue;
         }
         packageData = await fetchPackageFromGitHub(
@@ -314,11 +301,9 @@ export async function lazyLoadPackageFromRepositories(
         vcsType: repo.vcs_type,
         error: error instanceof Error ? error.message : String(error) 
       });
-      // Continue to next repository
     }
   }
 
-  // Not found in any configured repository - try Packagist as last resort
   const { isPackagistMirroringEnabled } = await import('../modules/admin');
   const mirroringEnabled = await isPackagistMirroringEnabled(kv);
   
