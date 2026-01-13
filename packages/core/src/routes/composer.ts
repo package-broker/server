@@ -815,18 +815,45 @@ export function deriveVersionNormalized(version: string): string | undefined {
     return `${base}.0-patch${patch}`;
   }
 
-  // Handle numeric versions (ensure 4 parts)
-  // Use two-step approach to avoid ReDoS vulnerability:
-  // 1. Match numeric part (no backtracking)
-  // 2. Extract suffix separately
-  const numericPartMatch = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?/);
-  if (numericPartMatch) {
-    const major = numericPartMatch[1];
-    const minor = numericPartMatch[2] ?? '0';
-    const patch = numericPartMatch[3] ?? '0';
-    const build = numericPartMatch[4] ?? '0';
-    // Extract suffix separately (everything after the matched numeric part)
-    const suffix = v.slice(numericPartMatch[0].length); // e.g., "-beta", "-alpha", "-dev"
+  // Explicit parser avoids regex backtracking and ReDoS concerns:
+  // 1. Parse up to 4 numeric segments separated by dots from the start of the string.
+  // 2. Treat everything after the parsed numeric part as the suffix (e.g., "-beta", "-alpha", "-dev").
+  let index = 0;
+  const length = v.length;
+  const segments: string[] = [];
+
+  while (index < length && segments.length < 4) {
+    const start = index;
+    // Read a numeric segment
+    while (index < length) {
+      const ch = v.charCodeAt(index);
+      if (ch < 48 || ch > 57) { // not '0'–'9'
+        break;
+      }
+      index++;
+    }
+    if (index === start) {
+      // No digits found where a segment was expected
+      break;
+    }
+    segments.push(v.slice(start, index));
+
+    // If we have 4 segments or we've reached the end, stop
+    if (segments.length === 4 || index >= length) {
+      break;
+    }
+
+    // Expect a dot between segments; if not present, stop parsing numeric part
+    if (v[index] === '.') {
+      index++;
+      continue;
+    }
+    break;
+  }
+
+  if (segments.length > 0) {
+    const [major, minor = '0', patch = '0', build = '0'] = segments;
+    const suffix = v.slice(index); // everything after the numeric part
     return `${major}.${minor}.${patch}.${build}${suffix}`;
   }
 
