@@ -36,7 +36,7 @@ export interface ComposerRouteEnv {
 }
 
 /** Default maximum versions per package to avoid CPU timeout on Cloudflare Workers */
-const DEFAULT_MAX_VERSIONS = 50;
+export const DEFAULT_MAX_VERSIONS = 50;
 
 /**
  * Schedule background storage of package data.
@@ -831,14 +831,17 @@ export function deriveVersionNormalized(version: string): string | undefined {
   }
 
   // Handle numeric versions (ensure 4 parts)
-  // Match: major.minor.patch.build with optional suffix (e.g., "-beta", "-alpha")
-  const numericMatch = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(.*)$/);
-  if (numericMatch) {
-    const major = numericMatch[1];
-    const minor = numericMatch[2] ?? '0';
-    const patch = numericMatch[3] ?? '0';
-    const build = numericMatch[4] ?? '0';
-    const suffix = numericMatch[5] || ''; // e.g., "-beta", "-alpha", "-dev"
+  // Use two-step approach to avoid ReDoS vulnerability:
+  // 1. Match numeric part (no backtracking)
+  // 2. Extract suffix separately
+  const numericPartMatch = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?/);
+  if (numericPartMatch) {
+    const major = numericPartMatch[1];
+    const minor = numericPartMatch[2] ?? '0';
+    const patch = numericPartMatch[3] ?? '0';
+    const build = numericPartMatch[4] ?? '0';
+    // Extract suffix separately (everything after the matched numeric part)
+    const suffix = v.slice(numericPartMatch[0].length); // e.g., "-beta", "-alpha", "-dev"
     return `${major}.${minor}.${patch}.${build}${suffix}`;
   }
 
