@@ -222,7 +222,7 @@ async function extractAndStoreReadme(
   }
 }
 
-function findVersionInMetadata(
+export function findVersionInMetadata(
   versionFromUrl: string,
   displayVersion: string,
   normalizedVersions: Array<{ version: string; metadata: any }>
@@ -270,6 +270,10 @@ function findVersionInMetadata(
   return null;
 }
 
+/**
+ * Extract version from URL parameter by removing archive extensions
+ * Handles: .zip, .tar, .tar.gz, .tar.bz2
+ */
 function extractVersionFromParam(versionParam: string | undefined): string {
   if (!versionParam) return '';
   
@@ -280,7 +284,7 @@ function extractVersionFromParam(versionParam: string | undefined): string {
     .replace(/\.zip$/, '');
 }
 
-function normalizeVersionToDisplay(version: string): string {
+export function normalizeVersionToDisplay(version: string): string {
   const patchMatch = version.match(/^(\d+\.\d+\.\d+)\.0-patch(\d+)$/);
   if (patchMatch) {
     const [, base, patch] = patchMatch;
