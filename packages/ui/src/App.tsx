@@ -11,6 +11,7 @@ import Invite from './pages/Invite';
 import Setup from './pages/Setup';
 import { Users } from './pages/Users';
 import { Profile } from './pages/Profile';
+import { OtherProjects } from './components/OtherProjects';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { checkAuthRequired } from './lib/api';
 
@@ -160,8 +161,10 @@ function AppContent() {
         </Routes>
       </main>
 
+      <OtherProjects />
+
       {/* Footer */}
-      <footer className="border-t border-slate-800 mt-16 py-8">
+      <footer className="border-t border-slate-800 mt-0 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-center md:text-left">
