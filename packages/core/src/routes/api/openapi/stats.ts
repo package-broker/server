@@ -5,7 +5,7 @@
  */
 
 import { createRoute, z } from '@hono/zod-openapi';
-import { statsResponseSchema, errorResponseSchema } from '@package-broker/shared';
+import { statsResponseSchema } from '@package-broker/shared';
 
 export const getStatsRouteDef = createRoute({
   method: 'get',

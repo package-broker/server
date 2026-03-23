@@ -9,7 +9,7 @@ import {
   userListResponseSchema,
   createUserRequestSchema,
   createUserResponseSchema,
-  userResponseSchema,
+
   errorResponseSchema,
 } from '@package-broker/shared';
 

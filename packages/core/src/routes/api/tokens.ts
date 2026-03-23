@@ -6,7 +6,7 @@
 
 // Token API routes
 
-import type { Context } from 'hono';
+
 import type { OpenAPIContext } from './types';
 import { createTokenSchema, updateTokenSchema } from '@package-broker/shared';
 import type { DatabasePort } from '../../ports';

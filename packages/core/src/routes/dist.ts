@@ -316,7 +316,6 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
   let pkgParam = c.req.param('package');
   let packageName: string;
   let version = extractVersionFromParam(c.req.param('version'));
-  const reference = c.req.param('reference');
 
   const db = c.get('database');
 

@@ -6,7 +6,7 @@
 
 // Settings API route
 
-import type { Context } from 'hono';
+
 import type { OpenAPIContext } from './types';
 import { updatePackagistMirroringRequestSchema } from '@package-broker/shared';
 

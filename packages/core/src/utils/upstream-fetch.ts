@@ -429,7 +429,7 @@ async function fetchGitHubComposerJson(
       if (response.ok) {
         return await response.json();
       }
-    } catch (error) {
+    } catch (_error) {
       // Continue to next branch
     }
   }
@@ -467,7 +467,7 @@ async function fetchGitHubTags(
         versions.set(version, tag.commit.sha);
       }
     }
-  } catch (error) {
+  } catch (_error) {
     const logger = getLogger();
     logger.warn('Error fetching GitHub tags', { owner, repo });
   }

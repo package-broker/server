@@ -6,7 +6,6 @@
 
 import type { Context } from 'hono';
 import { getLogger } from '../utils/logger';
-import type { OpenAPIHono } from '@hono/zod-openapi';
 
 /**
  * Health check endpoint

@@ -1,6 +1,6 @@
 // Artifacts API routes
 
-import type { Context } from 'hono';
+
 import type { OpenAPIContext } from './types';
 import type { DatabasePort } from '../../ports';
 import { artifacts } from '../../db/schema';

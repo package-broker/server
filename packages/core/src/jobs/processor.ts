@@ -8,7 +8,7 @@
 // Automatically falls back to synchronous execution when Queues are unavailable
 
 import { createD1Database as createDatabase } from '../db';
-import { tokens, artifacts, repositories } from '../db/schema';
+import { tokens, artifacts } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { syncRepository, type SyncEnv, type SyncOptions } from '../sync/repository-sync';
 import { getLogger } from '../utils/logger';
@@ -125,7 +125,7 @@ class SyncJobProcessor implements JobProcessor {
             .where(eq(tokens.id, job.tokenId));
           break;
 
-        case 'update_artifact_download':
+        case 'update_artifact_download': {
           // Increment download count and update last_downloaded_at
           const [artifact] = await db
             .select()
@@ -143,8 +143,9 @@ class SyncJobProcessor implements JobProcessor {
               .where(eq(artifacts.id, job.artifactId));
           }
           break;
+        }
 
-        case 'sync_repository':
+        case 'sync_repository': {
           if (!this.syncOptions) {
             logger.warn('SyncJobProcessor: syncOptions not provided, skipping sync', { repoId: job.repoId });
             return;
@@ -165,6 +166,7 @@ class SyncJobProcessor implements JobProcessor {
             logger.info('Sync successful for repo', { repoId: job.repoId, packageCount: result.packages.length });
           }
           break;
+        }
 
         default:
           logger.warn('Unknown job type', { jobType: (job as any).type });

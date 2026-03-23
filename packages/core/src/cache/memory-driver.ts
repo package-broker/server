@@ -50,7 +50,7 @@ export class MemoryCacheDriver implements CachePort {
     // Note: ReadableStream support in memory driver is limited/not implemented for full compatibility,
     // usually we'd want to read it. For now assuming string or basic objects.
     
-    let storedValue: any = value;
+    const storedValue: any = value;
     
     if (value instanceof ReadableStream || value instanceof ArrayBuffer || value instanceof FormData) {
         // In a real memory implementation we might want to buffer this, 

@@ -7,9 +7,9 @@
 // Composer routes - packages.json and p2 provider
 
 import type { Context } from 'hono';
-import type { DatabasePort, CachePort } from '../ports';
+import type { DatabasePort } from '../ports';
 import { repositories, packages } from '../db/schema';
-import { eq, and, inArray, or } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { createJobProcessor, type Job } from '../jobs/processor';
 import type { StorageDriver } from '../storage/driver';
 import { isPackagistMirroringEnabled, isPackageCachingEnabled } from '../modules/admin';
@@ -917,192 +917,6 @@ export async function ensurePackagistRepository(
   }
 }
 
-/**
- * Proxy request to public Packagist (for mirroring)
- * Also stores package metadata in database for artifact downloads
- */
-async function proxyToPackagist(
-  c: Context<ComposerRouteEnv>,
-  packageName: string
-): Promise<Response> {
-  const packagistUrl = `https://repo.packagist.org/p2/${packageName}.json`;
-  const logger = getLogger();
-
-  try {
-    // Add timeout to prevent hanging requests (Cloudflare Workers have 30s limit)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
-
-    let response: Response;
-    try {
-      response = await fetch(packagistUrl, {
-        headers: {
-          'User-Agent': COMPOSER_USER_AGENT,
-        },
-        signal: controller.signal,
-      });
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        logger.error('Timeout fetching from Packagist', { packageName, url: packagistUrl });
-        return c.json({
-          error: 'Gateway Timeout',
-          message: 'Request to Packagist timed out. Please try again.'
-        }, 504);
-      }
-      throw fetchError;
-    }
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return c.json({ error: 'Not Found', message: 'Package not found' }, 404);
-      }
-      if (response.status >= 500) {
-        logger.warn('Packagist server error', { packageName, status: response.status });
-        return c.json({
-          error: 'Upstream Error',
-          message: `Packagist returned error ${response.status}. Please try again later.`
-        }, 502);
-      }
-      return c.json({
-        error: 'Upstream Error',
-        message: `Failed to fetch from Packagist: ${response.status} ${response.statusText}`
-      }, 502);
-    }
-
-    let packageData: any;
-    try {
-      packageData = await response.json();
-    } catch (parseError) {
-      logger.error('Failed to parse Packagist response', { packageName, error: parseError instanceof Error ? parseError.message : String(parseError) });
-      return c.json({
-        error: 'Upstream Error',
-        message: 'Invalid response from Packagist'
-      }, 502);
-    }
-
-    const url = new URL(c.req.url);
-    const baseUrl = `${url.protocol}//${url.host}`;
-
-    // Transform dist URLs in memory (lightweight, no D1 operations)
-    // This allows us to return the response immediately before hitting CPU limits
-    const maxVersions = getMaxVersions(c.env);
-    const transformedData = transformDistUrlsInMemory(packageData, 'packagist', baseUrl, maxVersions);
-
-    // Check if we should skip storage (for Free tier optimization)
-    const skipStorage = (c.env as any).SKIP_PACKAGE_STORAGE === 'true';
-
-    // Store in D1 in background (doesn't block response)
-    // Priority: 1. Cloudflare Workflow (durable, high CPU limits)
-    //           2. waitUntil (best-effort, low CPU limits)
-    if (!skipStorage) {
-      const workflow = c.env.PACKAGE_STORAGE_WORKFLOW;
-
-      if (workflow) {
-        // Use Cloudflare Workflow for durable background processing
-        // This provides higher CPU limits and automatic retries
-        c.executionCtx.waitUntil((async () => {
-          try {
-            const instance = await workflow.create({
-              id: `pkg-${packageName.replace('/', '-')}-${Date.now()}`,
-              params: {
-                packageName,
-                packageData,
-                repoId: 'packagist',
-                proxyBaseUrl: baseUrl,
-              },
-            });
-            logger.debug('Workflow triggered for package storage', {
-              packageName,
-              instanceId: instance.id
-            });
-          } catch (e) {
-            // Workflow creation failed - fall back to inline processing
-            logger.warn('Workflow creation failed, falling back to inline', {
-              packageName,
-              error: e instanceof Error ? e.message : String(e)
-            });
-            // Fallback to inline processing
-            try {
-              const db = c.get('database');
-              await ensurePackagistRepository(db, c.env.ENCRYPTION_KEY, c.env.KV);
-              await transformPackageDistUrls(packageData, 'packagist', baseUrl, db);
-            } catch (fallbackError) {
-              logger.warn('Fallback storage also failed', {
-                packageName,
-                error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-              });
-            }
-          }
-        })());
-      } else {
-        // Fallback to waitUntil (original behavior, may hit CPU limits)
-        c.executionCtx.waitUntil((async () => {
-          try {
-            const db = c.get('database');
-            await ensurePackagistRepository(db, c.env.ENCRYPTION_KEY, c.env.KV);
-            const { storedCount, errors } = await transformPackageDistUrls(packageData, 'packagist', baseUrl, db);
-
-            logger.info('Stored package versions from Packagist (background)', { packageName, storedCount, errorCount: errors.length });
-            if (errors.length > 0) {
-              logger.warn('Package storage errors (background)', { packageName, errors });
-            }
-          } catch (e) {
-            // Ignore background errors - storage is best-effort
-            logger.warn('Background storage failed', { packageName, error: e instanceof Error ? e.message : String(e) });
-          }
-        })());
-      }
-    }
-
-    // Track metadata request (cache miss, from Packagist)
-    const analytics = getAnalytics();
-    const requestId = c.get('requestId') as string | undefined;
-    const packageCount = transformedData.packages?.[packageName] ? Object.keys(transformedData.packages[packageName]).length : 0;
-    analytics.trackPackageMetadataRequest({
-      requestId,
-      cacheHit: false,
-      packageCount,
-    });
-
-    // Return response immediately (fast path)
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    headers.set('Last-Modified', new Date().toUTCString());
-    headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
-    headers.set('X-Cache', 'MISS-PACKAGIST');
-
-    return new Response(JSON.stringify(transformedData), { status: 200, headers });
-  } catch (error) {
-    logger.error('Error proxying to Packagist', {
-      packageName,
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
-    });
-
-    // Determine appropriate error response
-    if (error instanceof Error) {
-      if (error.message.includes('timeout') || error.message.includes('aborted')) {
-        return c.json({
-          error: 'Gateway Timeout',
-          message: 'Request to Packagist timed out. Please try again.'
-        }, 504);
-      }
-      if (error.message.includes('network') || error.message.includes('fetch')) {
-        return c.json({
-          error: 'Service Unavailable',
-          message: 'Unable to reach Packagist. Please try again later.'
-        }, 503);
-      }
-    }
-
-    return c.json({
-      error: 'Upstream Error',
-      message: 'Failed to fetch from Packagist'
-    }, 502);
-  }
-}
 
 /**
  * Sync all pending repositories
@@ -1407,9 +1221,6 @@ export async function transformPackageDistUrls(
       const proxyDistUrl = `${proxyBaseUrl}/dist/${repoId}/${pkgName}/${version}.zip`;
       const sourceDistUrl = metadata.dist?.url || null;
 
-      // Use existing reference or generate simple one (no expensive crypto)
-      // Most Packagist packages already have dist.reference, so this is rarely needed
-      const distReference = metadata.dist?.reference || `${pkgName.replace('/', '-')}-${version}`.substring(0, 40);
 
       // Store RAW metadata (complete upstream package version object)
       // We'll generate clean responses from stored data, not transform on ingestion

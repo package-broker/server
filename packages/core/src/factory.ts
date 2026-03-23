@@ -3,16 +3,13 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { cors } from 'hono/cors';
 import { VERSION } from '@package-broker/shared';
 import {
-    composerVersionMiddleware,
-    distAuthMiddleware,
     requestIdMiddleware,
     getLogger,
-    initAnalytics,
     type StorageDriver,
     type DatabasePort,
     type CachePort,
 } from './index';
-import authModule, { setupHandler, authMiddleware, sessionMiddleware } from './modules/auth';
+import authModule, { setupHandler, sessionMiddleware } from './modules/auth';
 import systemModule from './modules/system';
 import usersModule from './modules/users';
 import repositoriesModule from './modules/repositories';
@@ -149,7 +146,7 @@ export function createApp(options?: {
             let cache: any;
             try {
                 cache = c.get('cache') || c.env?.KV;
-            } catch (e) {
+            } catch (_e) {
                 // If cache access fails, return unauthenticated
                 return { authenticated: false };
             }
@@ -166,7 +163,7 @@ export function createApp(options?: {
                 } else if (cache.get) {
                     sessionData = await cache.get(`session:${token}`, 'json');
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Session retrieval failed, return unauthenticated
                 return { authenticated: false };
             }
@@ -179,7 +176,7 @@ export function createApp(options?: {
                 authenticated: true,
                 role: sessionData.role || 'viewer',
             };
-        } catch (e) {
+        } catch (_e) {
             // Any error means not authenticated
             return { authenticated: false };
         }

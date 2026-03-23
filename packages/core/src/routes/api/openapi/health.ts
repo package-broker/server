@@ -4,7 +4,7 @@
  * Licensed under AGPL-3.0
  */
 
-import { createRoute, z } from '@hono/zod-openapi';
+import { createRoute } from '@hono/zod-openapi';
 import { healthResponseSchema } from '@package-broker/shared';
 
 export const healthRouteDef = createRoute({

@@ -208,7 +208,7 @@ async function syncWithProviderIncludes(
           }));
       
       for (const { version, metadata } of versionsArray) {
-        let distUrl = resolveDistUrl(baseUrl, metadata.dist?.url, packageName, version);
+        const distUrl = resolveDistUrl(baseUrl, metadata.dist?.url, packageName, version);
 
         allPackages.push({
           name: packageName,

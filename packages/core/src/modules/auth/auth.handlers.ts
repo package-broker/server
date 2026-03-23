@@ -5,15 +5,8 @@
  */
 
 import type { Context } from 'hono';
-import type { OpenAPIContext } from '../../routes/api/types';
 import { UserService } from '../../services/UserService';
 import { getAnalytics } from '../../utils/analytics';
-import {
-    loginRouteDef,
-    logoutRouteDef,
-    meRouteDef,
-    checkAuthRequiredRouteDef,
-} from './auth.routes';
 
 // Generate a session token
 function generateSessionToken(): string {

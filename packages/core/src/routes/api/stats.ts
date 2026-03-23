@@ -1,6 +1,6 @@
 // Stats API route
 
-import type { Context } from 'hono';
+
 import type { OpenAPIContext } from './types';
 import type { DatabasePort } from '../../ports';
 import { repositories, artifacts, packages } from '../../db/schema';

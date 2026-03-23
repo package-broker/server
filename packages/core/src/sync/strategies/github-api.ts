@@ -250,7 +250,7 @@ async function fetchComposerJsonFiles(
           },
         });
       }
-    } catch (error) {
+    } catch (_error) {
       const logger = getLogger();
       logger.warn('Failed to fetch composer.json', { owner, repo, file: file.path });
     }
