@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/ui",
-  "version": "0.17.2",
+  "version": "0.17.3",
   "type": "module",
   "files": [
     "dist",
