@@ -16,7 +16,7 @@ import { downloadFromSource } from '../utils/download';
 import { decryptCredentials } from '../utils/encryption';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { nanoid } from 'nanoid';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, strFromU8, zipSync, gunzipSync } from 'fflate';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
 import { type AuthContext } from '../middleware/auth';
@@ -1354,3 +1354,111 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
 
 export const distMirrorRoute = distRoute;
 export const distLockfileRoute = distRoute;
+
+/**
+ * Detect if binary data is a TAR archive.
+ * Checks for ZIP first (to avoid false positives), then gzip, then ustar magic.
+ */
+function isTarArchive(data: Uint8Array): boolean {
+  if (data.length < 264) return false;
+
+  // ZIP magic bytes — not a TAR
+  if (data[0] === 0x50 && data[1] === 0x4B && data[2] === 0x03 && data[3] === 0x04) {
+    return false;
+  }
+
+  // Gzip magic — decompress first, then check inner TAR
+  if (data[0] === 0x1f && data[1] === 0x8b) {
+    try {
+      const decompressed = gunzipSync(data);
+      return isTarArchive(decompressed);
+    } catch {
+      return false;
+    }
+  }
+
+  // UStar magic at offset 257
+  const ustarMagic = String.fromCharCode(...data.slice(257, 263));
+  return ustarMagic === 'ustar\x00' || ustarMagic === 'ustar ';
+}
+
+/**
+ * Convert a TAR (or .tar.gz) archive to ZIP format in memory.
+ * Handles gzip-compressed input automatically.
+ */
+function convertTarToZip(data: Uint8Array): Uint8Array {
+  // Decompress gzip if needed
+  if (data[0] === 0x1f && data[1] === 0x8b) {
+    data = gunzipSync(data);
+  }
+
+  const files: Record<string, Uint8Array> = {};
+  let offset = 0;
+
+  while (offset + 512 <= data.length) {
+    // Check for end-of-archive (two consecutive zero blocks)
+    const header = data.slice(offset, offset + 512);
+    if (header.every(b => b === 0)) break;
+
+    // Extract filename (bytes 0-99)
+    let nameEnd = 0;
+    while (nameEnd < 100 && header[nameEnd] !== 0) nameEnd++;
+    let name = new TextDecoder().decode(header.slice(0, nameEnd));
+
+    // UStar prefix (bytes 345-499)
+    if (header[345] !== 0) {
+      let prefixEnd = 345;
+      while (prefixEnd < 500 && header[prefixEnd] !== 0) prefixEnd++;
+      const prefix = new TextDecoder().decode(header.slice(345, prefixEnd));
+      name = prefix + '/' + name;
+    }
+
+    // File size from octal (bytes 124-135)
+    let sizeStr = '';
+    for (let i = 124; i < 136; i++) {
+      if (header[i] === 0 || header[i] === 32) break;
+      sizeStr += String.fromCharCode(header[i]);
+    }
+    const size = parseInt(sizeStr, 8) || 0;
+
+    // Type flag (byte 156): '0' or '\0' = regular file
+    const typeFlag = header[156];
+    offset += 512;
+
+    if ((typeFlag === 48 || typeFlag === 0) && size > 0 && name && !name.endsWith('/')) {
+      const fileData = data.slice(offset, offset + size);
+      // Sanitize path: strip leading / and ../ segments
+      const safeName = name.replace(/^\/+/, '').replace(/\.\.\//g, '');
+      if (safeName) {
+        files[safeName] = fileData;
+      }
+    }
+
+    // Advance past file data (padded to 512-byte boundary)
+    offset += Math.ceil(size / 512) * 512;
+  }
+
+  return zipSync(files);
+}
+
+/**
+ * If the response body is a TAR archive, convert it to ZIP.
+ * Returns the original data if it's already a ZIP.
+ */
+export async function ensureZipFormat(body: ReadableStream | ArrayBuffer | Uint8Array): Promise<Uint8Array> {
+  let data: Uint8Array;
+  if (body instanceof Uint8Array) {
+    data = body;
+  } else if (body instanceof ArrayBuffer) {
+    data = new Uint8Array(body);
+  } else {
+    const response = new Response(body);
+    data = new Uint8Array(await response.arrayBuffer());
+  }
+
+  if (isTarArchive(data)) {
+    return convertTarToZip(data);
+  }
+
+  return data;
+}
