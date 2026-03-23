@@ -51,6 +51,16 @@ export async function syncViaGitSsh(
     await writeFile(keyPath, privateKey, { mode: 0o600 });
     await chmod(keyPath, 0o600);
 
+    // Validate sshpass availability when passphrase is provided
+    if (passphrase) {
+      const { execSync } = await import('child_process');
+      try {
+        execSync('which sshpass', { stdio: 'ignore' });
+      } catch {
+        throw new Error('sshpass is required for passphrase-protected SSH keys but is not installed');
+      }
+    }
+
     // Convert HTTPS URL to SSH format if needed
     const sshUrl = convertToSshUrl(url);
     repoPath = join(tempDir, 'repo');
@@ -148,7 +158,7 @@ async function cloneRepository(
     // Set up SSH command with key - properly escape keyPath
     // Use -i with properly escaped path to prevent command injection
     const escapedKeyPath = escapeShellArg(keyPath);
-    const sshCommand = `ssh -i ${escapedKeyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes`;
+    const sshCommand = `ssh -i ${escapedKeyPath} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes`;
     
     // Set environment variables
     // Note: For passphrase-protected keys, sshpass is required
@@ -190,6 +200,27 @@ async function cloneRepository(
     gitProcess.on('error', (error) => {
       reject(new Error(`Failed to spawn git process: ${error.message}`));
     });
+  });
+
+  // Fetch tags separately (shallow clone doesn't include them)
+  await new Promise<void>((resolve, reject) => {
+    const fetchTags = spawn('git', ['fetch', '--tags', '--depth', '1'], {
+      cwd: targetPath,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    fetchTags.on('close', (code) => {
+      // Non-zero exit is non-fatal — tags are optional
+      if (code === 0) {
+        resolve();
+      } else {
+        logger.warn('Failed to fetch tags, versions may be limited', { url, code });
+        resolve();
+      }
+    });
+
+    fetchTags.on('error', () => resolve());
   });
 }
 
