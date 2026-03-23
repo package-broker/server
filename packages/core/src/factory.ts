@@ -24,17 +24,12 @@ import { getPackageStats } from './modules/admin/admin.handlers';
 // Generic Environment Interface
 export interface AppBindings {
     // Cloudflare specific bindings can be optional or generic
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     DB?: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     KV?: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     QUEUE?: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ANALYTICS?: any;
     // Core config
     LOG_LEVEL?: 'debug' | 'info' | 'warn' | 'error';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any;
 }
 
@@ -90,7 +85,6 @@ export function createApp(options?: {
     // Inject database, storage, and cache drivers if provided
     // This MUST happen regardless of whether onInit is provided
     if (options?.database) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         app.use('*', async (c: any, next: any) => {
             c.set('database', options.database!);
             await next();
@@ -103,7 +97,6 @@ export function createApp(options?: {
         });
     }
     if (options?.cache) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         app.use('*', async (c: any, next: any) => {
             c.set('cache', options.cache!);
             await next();
@@ -142,7 +135,6 @@ export function createApp(options?: {
     ];
 
     // Helper function to check authentication and get user role
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async function checkAuthentication(c: any): Promise<{ authenticated: boolean; role?: 'admin' | 'viewer' }> {
         try {
             const authHeader = c.req.header('Authorization');
@@ -151,7 +143,6 @@ export function createApp(options?: {
             }
 
             const token = authHeader.slice(7);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let cache: any;
             try {
                 cache = c.get('cache') || c.env?.KV;
@@ -198,7 +189,6 @@ export function createApp(options?: {
     // Note: Auth routes now handle their own session middleware in the auth module
     // This middleware is for all other protected routes (users, repositories, tokens, etc.)
     protectedRoutes.use('*', async (c, next) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return sessionMiddleware(c as any, next as any);
     });
 
@@ -220,7 +210,6 @@ export function createApp(options?: {
       ...getPackageStatsRouteDef,
       path: '/packages/{name}/{version}/stats' as const,
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     protectedRoutes.openapi(packageStatsRoute as any, getPackageStats as any);
 
     // Mount protected routes under /api
@@ -250,7 +239,6 @@ export function createApp(options?: {
             // Filter paths based on authentication and role
             if (!auth.authenticated) {
                 // Guest: only public endpoints
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const filteredPaths: Record<string, any> = {};
                 for (const [path, pathItem] of Object.entries(fullSpec.paths || {})) {
                     if (PUBLIC_OPENAPI_PATHS.includes(path)) {
@@ -260,7 +248,6 @@ export function createApp(options?: {
                 fullSpec.paths = filteredPaths;
             } else if (auth.role === 'viewer') {
                 // Viewer (read-only): public + read-only endpoints (exclude admin-only)
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const filteredPaths: Record<string, any> = {};
                 for (const [path, pathItem] of Object.entries(fullSpec.paths || {})) {
                     // Include public paths
@@ -284,7 +271,6 @@ export function createApp(options?: {
                     // For protected paths, only include GET methods (read-only)
                     if (pathItem && typeof pathItem === 'object') {
                         const readOnlyMethods = ['get'];
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const filteredPathItem: Record<string, any> = {};
                         let hasReadOnlyMethod = false;
 

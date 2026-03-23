@@ -29,7 +29,6 @@ export interface PackageStorageParams {
   /** Package name in vendor/package format */
   packageName: string;
   /** Raw package data from upstream (Packagist or Composer repo) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   packageData: any;
   /** Repository ID (e.g., 'packagist' or repo UUID) */
   repoId: string;

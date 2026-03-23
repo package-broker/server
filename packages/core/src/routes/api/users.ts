@@ -1,4 +1,4 @@
-import type { Context } from 'hono';
+
 import type { OpenAPIContext } from './types';
 import { UserService } from '../../services/UserService';
 import { createUserRequestSchema } from '@package-broker/shared';
@@ -49,7 +49,7 @@ export async function createUser(c: OpenAPIContext<any, ReturnType<typeof create
                     from: c.env.SMTP_FROM || c.env.SMTP_USER,
                 });
 
-                let subject = 'Welcome to Composer Proxy';
+                const subject = 'Welcome to Composer Proxy';
                 let text = '';
                 let html = '';
 

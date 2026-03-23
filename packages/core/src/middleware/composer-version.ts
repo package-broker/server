@@ -1,6 +1,6 @@
 // Composer version middleware - reject Composer 1.x
 
-import type { Context, Next } from 'hono';
+import type { Context } from 'hono';
 
 /**
  * Middleware to reject Composer 1.x requests

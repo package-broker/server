@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import type { OpenAPIContext } from '../../routes/api/types';
 import type { DatabasePort, CachePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
-import { eq, like, and, sql, count, countDistinct, inArray } from 'drizzle-orm';
+import { eq, like, and, countDistinct, inArray } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
 import type { StorageDriver } from '../../storage/driver';
 import { buildStorageKey, buildReadmeStorageKey, buildChangelogStorageKey } from '../../storage/driver';

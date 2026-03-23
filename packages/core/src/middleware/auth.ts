@@ -1,10 +1,10 @@
 // Authentication middleware
 
-import type { Context, Next } from 'hono';
+import type { Context } from 'hono';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { DatabasePort } from '../ports';
-import { tokens, type tokens as tokensTable } from '../db/schema';
+import { tokens } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
 export interface AuthContext {

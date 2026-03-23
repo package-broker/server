@@ -13,7 +13,6 @@ import { decryptCredentials } from '../../utils/encryption';
 import { nanoid } from 'nanoid';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { isPackagistMirroringEnabled } from '../../modules/admin';
-import { getLogger } from '../../utils/logger';
 import { fetchPackageFromUpstream, type UpstreamRepository } from '../../utils/upstream-fetch.js';
 
 export interface PackagesRouteEnv {
