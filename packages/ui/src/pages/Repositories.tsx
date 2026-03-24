@@ -9,6 +9,7 @@ import {
   syncRepository,
   getSettings,
   updatePackagistMirroring,
+  checkSshSupport,
   type Repository,
 } from '../lib/api';
 import { CREDENTIAL_FIELD_DEFINITIONS, CREDENTIALS_BY_SOURCE_TYPE, type CredentialType } from '@package-broker/shared';
@@ -27,6 +28,11 @@ export function Repositories() {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: getSettings,
+  });
+
+  const { data: sshSupport } = useQuery({
+    queryKey: ['ssh-support'],
+    queryFn: checkSshSupport,
   });
 
   // Filter repositories: only show Packagist when mirroring is enabled
@@ -190,7 +196,10 @@ export function Repositories() {
 
       {/* Add Repository Modal */}
       {showModal && (
-        <AddRepositoryModal onClose={() => setShowModal(false)} />
+        <AddRepositoryModal 
+          onClose={() => setShowModal(false)}
+          sshSupported={sshSupport?.ssh_supported ?? false}
+        />
       )}
 
       {/* Edit Repository Modal */}
@@ -198,6 +207,7 @@ export function Repositories() {
         <EditRepositoryModal
           repository={editingRepository}
           onClose={() => setEditingRepository(null)}
+          sshSupported={sshSupport?.ssh_supported ?? false}
         />
       )}
     </div>
@@ -205,7 +215,7 @@ export function Repositories() {
 }
 
 
-function AddRepositoryModal({ onClose }: { onClose: () => void }) {
+function AddRepositoryModal({ onClose, sshSupported }: { onClose: () => void; sshSupported: boolean }) {
   const [url, setUrl] = useState('');
   const [sourceType, setSourceType] = useState<'git' | 'composer'>('composer');
   const [credentialType, setCredentialType] = useState<CredentialType>('http_basic');
@@ -223,8 +233,11 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
     },
   });
 
-  // Get allowed credential types for current source type
-  const allowedCredentialTypes = CREDENTIALS_BY_SOURCE_TYPE[sourceType] || [];
+  // Get allowed credential types for current source type, including SSH if supported
+  const baseCredentialTypes = CREDENTIALS_BY_SOURCE_TYPE[sourceType] || [];
+  const allowedCredentialTypes = sshSupported && sourceType === 'git' && !baseCredentialTypes.includes('ssh_key')
+    ? [...baseCredentialTypes, 'ssh_key']
+    : baseCredentialTypes;
   const credentialFields = CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.fields || [];
 
   // Handle source type change - reset credential type to first valid option
@@ -295,11 +308,14 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
                 }}
                 className="input w-full"
               >
-                {allowedCredentialTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {CREDENTIAL_FIELD_DEFINITIONS[type]?.label || type}
-                  </option>
-                ))}
+                {allowedCredentialTypes.map((type) => {
+                  const credentialType = type as CredentialType;
+                  return (
+                    <option key={credentialType} value={credentialType}>
+                      {CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.label || credentialType}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -388,7 +404,7 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function EditRepositoryModal({ repository, onClose }: { repository: Repository; onClose: () => void }) {
+function EditRepositoryModal({ repository, onClose, sshSupported }: { repository: Repository; onClose: () => void; sshSupported: boolean }) {
   const [url, setUrl] = useState(repository.url);
   const [sourceType, setSourceType] = useState<'git' | 'composer'>(repository.vcs_type as 'git' | 'composer');
   const [credentialType, setCredentialType] = useState<CredentialType>(repository.credential_type as CredentialType);
@@ -406,16 +422,22 @@ function EditRepositoryModal({ repository, onClose }: { repository: Repository; 
     },
   });
 
-  // Get allowed credential types for current source type
-  const allowedCredentialTypes = CREDENTIALS_BY_SOURCE_TYPE[sourceType] || [];
+  // Get allowed credential types for current source type, including SSH if supported
+  const baseCredentialTypes: CredentialType[] = CREDENTIALS_BY_SOURCE_TYPE[sourceType] || [];
+  const allowedCredentialTypes: CredentialType[] = sshSupported && sourceType === 'git' && !baseCredentialTypes.includes('ssh_key')
+    ? [...baseCredentialTypes, 'ssh_key' as CredentialType]
+    : baseCredentialTypes;
   const credentialFields = CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.fields || [];
 
   // Handle source type change - reset credential type to first valid option
   const handleSourceTypeChange = (newSourceType: 'git' | 'composer') => {
     setSourceType(newSourceType);
-    const allowed = CREDENTIALS_BY_SOURCE_TYPE[newSourceType] || [];
+    const baseTypes: CredentialType[] = CREDENTIALS_BY_SOURCE_TYPE[newSourceType] || [];
+    const allowed: CredentialType[] = sshSupported && newSourceType === 'git' && !baseTypes.includes('ssh_key')
+      ? [...baseTypes, 'ssh_key' as CredentialType]
+      : baseTypes;
     if (allowed.length > 0 && !allowed.includes(credentialType)) {
-      setCredentialType(allowed[0]);
+      setCredentialType(allowed[0] as CredentialType);
       setCredentials({});
     }
   };
@@ -502,11 +524,14 @@ function EditRepositoryModal({ repository, onClose }: { repository: Repository; 
                 }}
                 className="input w-full"
               >
-                {allowedCredentialTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {CREDENTIAL_FIELD_DEFINITIONS[type]?.label || type}
-                  </option>
-                ))}
+                {allowedCredentialTypes.map((type) => {
+                  const credentialType = type as CredentialType;
+                  return (
+                    <option key={credentialType} value={credentialType}>
+                      {CREDENTIAL_FIELD_DEFINITIONS[credentialType]?.label || credentialType}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

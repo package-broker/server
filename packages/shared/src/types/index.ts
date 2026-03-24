@@ -9,8 +9,8 @@ export type CredentialType =
   | 'bitbucket_api_key'
   | 'bitbucket_server_pat'
   | 'bearer_token'
+  | 'ssh_key'
   | 'none';
-// 'ssh_key' - DEFERRED: Workers cannot execute git clone operations
 
 export type VcsType = 'git' | 'composer' | 'artifact';
 

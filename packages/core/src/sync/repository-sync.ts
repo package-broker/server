@@ -18,6 +18,7 @@ import type { StorageDriver } from '../storage/driver';
 import { nanoid } from 'nanoid';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
+import { isSshSupported } from '../utils/environment';
 
 export interface SyncEnv {
   DB: D1Database;
@@ -176,6 +177,7 @@ export async function syncRepository(
  * Supports:
  * - Authenticated GitHub repos (github_token)
  * - Public GitHub repos (none credential type)
+ * - SSH key authentication (ssh_key) - Node.js only
  */
 async function syncGitRepository(
   url: string,
@@ -183,7 +185,36 @@ async function syncGitRepository(
   credentials: Record<string, string>,
   composerJsonPath?: string
 ): Promise<SyncResult> {
-  // Parse URL to extract owner/repo
+  // Handle SSH key authentication (Node.js only)
+  if (credentialType === 'ssh_key') {
+    if (!isSshSupported()) {
+      return {
+        success: false,
+        packages: [],
+        error: 'ssh_not_supported',
+      };
+    }
+
+    const privateKey = credentials.private_key;
+    if (!privateKey) {
+      return {
+        success: false,
+        packages: [],
+        error: 'ssh_key_required',
+      };
+    }
+
+    // Dynamically import SSH sync strategy (Node.js only)
+    const { syncViaGitSsh } = await import('./strategies/git-ssh');
+    return syncViaGitSsh(
+      url,
+      privateKey,
+      credentials.passphrase,
+      composerJsonPath || '**/composer.json'
+    );
+  }
+
+  // Parse URL to extract owner/repo for GitHub API sync
   const urlMatch = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
 
   if (urlMatch) {
