@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",
-    "@package-broker/main": "^0.13.0",
+    "@package-broker/main": "^0.17.4",
     "execa": "^9.6.1",
     "prompts": "^2.4.2",
     "wrangler": "^4.66.0"

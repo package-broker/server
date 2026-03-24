@@ -19,7 +19,7 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@package-broker/main": "^0.16.3"
+    "@package-broker/main": "^0.17.4"
   },
   "devDependencies": {
     "@types/node": "^20.19.27",
