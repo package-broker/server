@@ -33,9 +33,7 @@ export async function syncViaGitSsh(
   composerJsonPath: string = '**/composer.json'
 ): Promise<SyncResult> {
   // Dynamically import Node.js modules (only available in Node.js environment)
-  const { spawn } = await import('child_process');
-  const { promisify } = await import('util');
-  const { writeFile, mkdir, rm, chmod, readFile } = await import('fs/promises');
+  const { writeFile, mkdir, rm, chmod } = await import('fs/promises');
   const { join } = await import('path');
   const { tmpdir } = await import('os');
 
@@ -153,39 +151,33 @@ async function cloneRepository(
   passphrase?: string
 ): Promise<void> {
   const { spawn } = await import('child_process');
-  
-  return new Promise((resolve, reject) => {
-    // Set up SSH command with key - properly escape keyPath
-    // Use -i with properly escaped path to prevent command injection
-    const escapedKeyPath = escapeShellArg(keyPath);
-    const sshCommand = `ssh -i ${escapedKeyPath} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes`;
-    
-    // Set environment variables
-    // Note: For passphrase-protected keys, sshpass is required
-    // The passphrase is escaped to prevent command injection
-    const env = {
-      ...process.env,
-      GIT_SSH_COMMAND: passphrase 
-        ? `sshpass -p ${escapeShellArg(passphrase)} ${sshCommand}` 
-        : sshCommand,
-    };
 
-    // For passphrase-protected keys, we need ssh-agent or expect
-    // For now, we'll use a simpler approach with GIT_SSH_COMMAND
-    // Note: This requires sshpass to be installed for passphrase support
+  // Set up SSH command with key - properly escape keyPath
+  const escapedKeyPath = escapeShellArg(keyPath);
+  const sshCommand = `ssh -i ${escapedKeyPath} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes`;
+
+  const gitEnv = {
+    ...process.env,
+    GIT_SSH_COMMAND: passphrase
+      ? `sshpass -p ${escapeShellArg(passphrase)} ${sshCommand}`
+      : sshCommand,
+  };
+
+  // Clone repository
+  await new Promise<void>((resolve, reject) => {
     const gitProcess = spawn('git', ['clone', '--depth', '1', url, targetPath], {
-      env,
+      env: gitEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     let stdout = '';
     let stderr = '';
 
-    gitProcess.stdout?.on('data', (data) => {
+    gitProcess.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
-    gitProcess.stderr?.on('data', (data) => {
+    gitProcess.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString();
     });
 
@@ -203,21 +195,18 @@ async function cloneRepository(
   });
 
   // Fetch tags separately (shallow clone doesn't include them)
-  await new Promise<void>((resolve, reject) => {
+  await new Promise<void>((resolve) => {
     const fetchTags = spawn('git', ['fetch', '--tags', '--depth', '1'], {
       cwd: targetPath,
-      env,
+      env: gitEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     fetchTags.on('close', (code) => {
-      // Non-zero exit is non-fatal — tags are optional
-      if (code === 0) {
-        resolve();
-      } else {
+      if (code !== 0) {
         logger.warn('Failed to fetch tags, versions may be limited', { url, code });
-        resolve();
       }
+      resolve();
     });
 
     fetchTags.on('error', () => resolve());
@@ -353,7 +342,6 @@ async function findAndParseComposerFiles(
  */
 async function getVersionsFromTags(repoPath: string): Promise<string[]> {
   const { spawn } = await import('child_process');
-  const { promisify } = await import('util');
 
   try {
     // Use spawn with cwd option instead of shell cd command for security
