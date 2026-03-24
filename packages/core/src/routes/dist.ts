@@ -1427,8 +1427,15 @@ function convertTarToZip(data: Uint8Array): Uint8Array {
 
     if ((typeFlag === 48 || typeFlag === 0) && size > 0 && name && !name.endsWith('/')) {
       const fileData = data.slice(offset, offset + size);
-      // Sanitize path: strip leading / and ../ segments
-      const safeName = name.replace(/^\/+/, '').replace(/\.\.\//g, '');
+      // Sanitize path: resolve traversal sequences then strip leading /
+      // Use a loop to handle nested evasion patterns like '....//'' → '../'
+      let safeName = name;
+      let prev: string;
+      do {
+        prev = safeName;
+        safeName = safeName.replace(/\.\.\//g, '');
+      } while (safeName !== prev);
+      safeName = safeName.replace(/^\/+/, '');
       if (safeName) {
         files[safeName] = fileData;
       }
