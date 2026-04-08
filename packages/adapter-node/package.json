@@ -12,7 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.10",
+    "@hono/node-server": "^1.19.13",
     "@package-broker/core": "^0.17.4",
     "@package-broker/shared": "^0.17.4",
     "better-sqlite3": "^12.5.0",
