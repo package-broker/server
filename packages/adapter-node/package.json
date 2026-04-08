@@ -17,7 +17,7 @@
     "@package-broker/shared": "^0.17.4",
     "better-sqlite3": "^12.5.0",
     "dotenv": "^17.2.3",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.7",
     "ioredis": "^5.9.1"
   },
