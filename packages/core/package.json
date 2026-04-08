@@ -34,7 +34,7 @@
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.1",
     "fflate": "^0.8.2",
-    "hono": "^4.12.7",
+    "hono": "^4.12.12",
     "micromatch": "^4.0.8",
     "nanoid": "^5.1.6",
     "nodemailer": "^7.0.12",
