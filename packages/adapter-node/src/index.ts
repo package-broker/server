@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { createApp, generateEncryptionKey } from '@package-broker/core';
+import { createApp, generateEncryptionKey, type DatabaseAdapter } from '@package-broker/core';
 import { config } from 'dotenv';
 import { SqliteDriver } from './drivers/sqlite-driver.js';
 import { FileSystemDriver } from './drivers/fs-driver.js';
@@ -28,7 +28,7 @@ console.log(`Configuration: DB=${DB_DRIVER}, STORAGE=${STORAGE_DRIVER}, CACHE=${
 
 async function start() {
     // Initialize Database Driver
-    let databaseDriver;
+    let databaseDriver: DatabaseAdapter;
     
     if (DB_DRIVER === 'sqlite') {
         console.log(`Initializing SQLite at ${DB_URL}`);
@@ -143,10 +143,41 @@ async function start() {
     }
 
     console.log(`Server listening on port ${PORT}`);
-    serve({
+    const server = serve({
         fetch: app.fetch,
-        port: PORT
+        port: PORT,
     });
+
+    let isShuttingDown = false;
+    const shutdown = () => {
+        if (isShuttingDown) {
+            return;
+        }
+        isShuttingDown = true;
+
+        console.log('Received shutdown signal, closing server...');
+        server.close(() => {
+            void (async () => {
+                try {
+                    await databaseDriver.close();
+                    console.log('HTTP server closed');
+                    process.exit(0);
+                } catch (error) {
+                    console.error('Error during graceful shutdown', error);
+                    process.exit(1);
+                }
+            })();
+        });
+
+        // Force exit after 10 seconds if graceful shutdown hangs
+        setTimeout(() => {
+            console.error('Graceful shutdown timed out, forcing exit');
+            process.exit(1);
+        }, 10_000).unref();
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
 }
 
 start().catch(console.error);
