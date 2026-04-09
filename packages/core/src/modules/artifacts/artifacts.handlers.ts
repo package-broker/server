@@ -4,7 +4,7 @@
  * Licensed under AGPL-3.0
  */
 
-import type { OpenAPIContext } from '../../routes/api/types';
+import type { OpenAPIContext } from '../../types/openapi';
 import type { DatabasePort } from '../../ports';
 import { artifacts } from '../../db/schema';
 import { eq, lt } from 'drizzle-orm';

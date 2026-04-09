@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { isPackagistMirroringEnabled } from '../routes/api/settings';
+import { isPackagistMirroringEnabled } from '../modules/admin';
 
 // Mock KV namespace
 function createMockKV(data: Record<string, string | null> = {}): KVNamespace {
@@ -146,7 +146,6 @@ describe('Packagist Mirroring Edge Cases', () => {
     expect(result).toBe(false);
   });
 });
-
 
 
 
