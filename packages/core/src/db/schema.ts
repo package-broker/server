@@ -42,6 +42,24 @@ export const tokens = sqliteTable(
   })
 );
 
+// Token scopes table (per-token access control)
+export const tokenScopes = sqliteTable(
+  'token_scopes',
+  {
+    id: text('id').primaryKey(),
+    token_id: text('token_id')
+      .notNull()
+      .references(() => tokens.id, { onDelete: 'cascade' }),
+    scope_type: text('scope_type').notNull(), // 'repository' | 'package_pattern'
+    scope_value: text('scope_value').notNull(), // repo ID or glob like 'vendor/*'
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    tokenIdIdx: index('idx_token_scopes_token_id').on(table.token_id),
+    uniqueScope: unique('token_scopes_unique').on(table.token_id, table.scope_type, table.scope_value),
+  })
+);
+
 // Artifacts table
 export const artifacts = sqliteTable(
   'artifacts',
