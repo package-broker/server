@@ -12,5 +12,10 @@ export const importGithubOrg: RouteHandler<typeof importGithubOrgRouteDef> = asy
     filter: body.package_filter,
   });
 
+  // Return 502 when GitHub API completely failed (errors present, no packages found)
+  if (result.errors.length > 0 && result.packages.length === 0) {
+    return c.json({ error: 'Bad Gateway', message: result.errors.join('; ') }, 502);
+  }
+
   return c.json(result, 200);
 };

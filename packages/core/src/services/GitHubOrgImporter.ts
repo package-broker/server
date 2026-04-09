@@ -29,7 +29,7 @@ export class GitHubOrgImporter {
     const errors: string[] = [];
     const packages: DiscoveredPackage[] = [];
 
-    const url = `https://composer.pkg.github.com/${this.org}/packages.json`;
+    const url = `https://composer.pkg.github.com/${encodeURIComponent(this.org)}/packages.json`;
 
     try {
       const response = await this.fetchFn(url, {

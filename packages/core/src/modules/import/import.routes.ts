@@ -4,8 +4,8 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { errorResponseSchema } from '@package-broker/shared';
 
 const importGithubOrgBodySchema = z.object({
-  github_org: z.string().min(1).openapi({ description: 'GitHub organization or user name' }),
-  auth_token: z.string().min(1).openapi({ description: 'GitHub personal access token with read:org + repo scope' }),
+  github_org: z.string().min(1).regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/, 'Invalid GitHub organization/user name').openapi({ description: 'GitHub organization or user name' }),
+  auth_token: z.string().min(1).trim().openapi({ description: 'GitHub personal access token with read:org + repo scope' }),
   package_filter: z.string().optional().openapi({ description: 'Filter packages by name (substring match)' }),
   dry_run: z.boolean().optional().default(false).openapi({ description: 'Preview what would be imported without creating repositories' }),
 });
@@ -53,6 +53,14 @@ export const importGithubOrgRouteDef = createRoute({
         },
       },
       description: 'Validation error',
+    },
+    502: {
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+      description: 'GitHub API unreachable or returned an error',
     },
   },
   tags: ['Import'],
