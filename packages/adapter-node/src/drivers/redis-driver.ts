@@ -1,6 +1,6 @@
 
 import { Redis } from 'ioredis';
-import type { CachePort, QueuePort } from '@package-broker/core';
+import type { CachePort, Job, QueuePort } from '@package-broker/core';
 
 export class RedisDriver implements CachePort, QueuePort {
     private redis: Redis;
@@ -54,11 +54,11 @@ export class RedisDriver implements CachePort, QueuePort {
     }
 
     // QueuePort implementation
-    async send(message: any): Promise<void> {
+    async send(message: Job): Promise<void> {
         await this.redis.rpush('jobs_queue', JSON.stringify(message));
     }
 
-    async sendBatch(messages: any[]): Promise<void> {
+    async sendBatch(messages: Job[]): Promise<void> {
         if (messages.length === 0) return;
         const pipeline = this.redis.pipeline();
         for (const msg of messages) {

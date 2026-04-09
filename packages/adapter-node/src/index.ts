@@ -37,9 +37,9 @@ async function start() {
         throw new Error(`Unsupported DB_DRIVER: ${DB_DRIVER}`);
     }
     
-    // Check if database is initialized (logging only)
-    const isInitialized = await databaseDriver.isInitialized();
-    if (!isInitialized) {
+    // Check database health (logging only)
+    const isHealthy = await databaseDriver.isHealthy();
+    if (!isHealthy) {
         console.warn('');
         console.warn('⚠️  DATABASE NOT INITIALIZED');
         console.warn('   Run migration scripts to initialize the database:');
@@ -50,7 +50,7 @@ async function start() {
         console.warn('');
     }
     
-    const database = databaseDriver.getConnection();
+    const database = await databaseDriver.connect();
 
     // Initialize Storage
     let storage;

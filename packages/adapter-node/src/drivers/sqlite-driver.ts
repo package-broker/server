@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { schema, type DatabasePort, type DatabaseDriver } from '@package-broker/core';
+import { schema, type DatabaseAdapter, type DatabasePort } from '@package-broker/core';
 import path from 'node:path';
 
 export interface SqliteConnection {
@@ -21,9 +21,9 @@ export function createSqliteDatabase(dbPath: string): SqliteConnection {
 
 /**
  * SQLite Database Driver
- * Implements DatabaseDriver interface for SQLite using Drizzle ORM
+ * Implements DatabaseAdapter interface for SQLite using Drizzle ORM
  */
-export class SqliteDriver implements DatabaseDriver {
+export class SqliteDriver implements DatabaseAdapter {
     private connection: SqliteConnection;
 
     constructor(dbPath: string) {
@@ -33,7 +33,7 @@ export class SqliteDriver implements DatabaseDriver {
     /**
      * Check if database is initialized by checking for the migrations tracking table
      */
-    async isInitialized(): Promise<boolean> {
+    async isHealthy(): Promise<boolean> {
         const { sqlite } = this.connection;
         try {
             // Check for migration tracking table created by migrate.cjs script
@@ -50,7 +50,7 @@ export class SqliteDriver implements DatabaseDriver {
      * Run migrations using Drizzle's migrator
      * Uses migration files from the specified path (e.g., packages/main/migrations)
      */
-    async runMigrations(migrationsPath: string): Promise<void> {
+    async migrate(migrationsPath: string): Promise<void> {
         const { db } = this.connection;
         const absolutePath = path.isAbsolute(migrationsPath) 
             ? migrationsPath 
@@ -62,8 +62,12 @@ export class SqliteDriver implements DatabaseDriver {
     /**
      * Get the database connection/ORM instance
      */
-    getConnection(): DatabasePort {
+    async connect(): Promise<DatabasePort> {
         return this.connection.db;
+    }
+
+    async close(): Promise<void> {
+        this.connection.sqlite.close();
     }
 
     /**
