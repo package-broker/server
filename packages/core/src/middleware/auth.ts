@@ -4,13 +4,15 @@ import type { Context } from 'hono';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { DatabasePort } from '../ports';
-import { tokens } from '../db/schema';
+import { tokens, tokenScopes } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { TokenScopeService } from '../services/TokenScopeService';
 
 export interface AuthContext {
   tokenId: string;
   tokenDescription: string;
   tokenPermissions: 'readonly' | 'write';
+  scopeService: TokenScopeService;
 }
 
 /**
@@ -207,11 +209,21 @@ export async function distAuthMiddleware(
     return c.json({ error: 'Too Many Requests', message: 'Rate limit exceeded' }, 429);
   }
 
+  // Load token scopes for access control
+  const scopeRows = await db
+    .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
+    .from(tokenScopes)
+    .where(eq(tokenScopes.token_id, tokenRecord.id));
+  const scopeService = new TokenScopeService(
+    scopeRows as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
+  );
+
   // Attach token info to context
   c.set('auth', {
     tokenId: tokenRecord.id,
     tokenDescription: tokenRecord.description,
     tokenPermissions: (tokenRecord.permissions || 'readonly') as 'readonly' | 'write',
+    scopeService,
   });
 
   // Update last_used_at (non-blocking)
@@ -335,11 +347,21 @@ export async function authMiddleware(
     );
   }
 
+  // Load token scopes for access control
+  const scopeRows = await db
+    .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
+    .from(tokenScopes)
+    .where(eq(tokenScopes.token_id, tokenRecord.id));
+  const scopeService = new TokenScopeService(
+    scopeRows as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
+  );
+
   // Attach token info to context
   c.set('auth', {
     tokenId: tokenRecord.id,
     tokenDescription: tokenRecord.description,
     tokenPermissions: (tokenRecord.permissions || 'readonly') as 'readonly' | 'write',
+    scopeService,
   });
 
   // Track token usage analytics
