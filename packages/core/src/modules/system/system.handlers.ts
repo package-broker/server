@@ -5,6 +5,8 @@
  */
 
 import type { Context } from 'hono';
+import type { AppVariables } from '../../factory';
+import { users } from '../../db/schema';
 import type { OpenAPIContext } from '../../routes/api/types';
 import { getLogger } from '../../utils/logger';
 import { isSshSupported } from '../../utils/environment';
@@ -13,16 +15,35 @@ import { isSshSupported } from '../../utils/environment';
  * Health check endpoint
  * Returns 200 OK if service is healthy
  */
-export async function healthHandler(c: Context<{ Variables: any }>): Promise<Response> {
+export async function healthHandler(c: Context<{ Variables: AppVariables }>): Promise<Response> {
   const logger = getLogger();
   logger.info('Health check requested', {
     method: c.req.method,
     url: c.req.url,
   });
 
+  const checks: Record<string, string> = {};
+  let overall: 'ok' | 'degraded' = 'ok';
+
+  try {
+    const db = c.get('database');
+
+    if (db) {
+      await db.select().from(users).limit(0);
+      checks.database = 'ok';
+    } else {
+      checks.database = 'unavailable';
+      overall = 'degraded';
+    }
+  } catch {
+    checks.database = 'error';
+    overall = 'degraded';
+  }
+
   return c.json({
-    status: 'ok',
+    status: overall,
     timestamp: Date.now(),
+    checks,
   });
 }
 
