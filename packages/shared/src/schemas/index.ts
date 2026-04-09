@@ -127,8 +127,9 @@ export const errorResponseSchema = z.object({
 
 // Health check response
 export const healthResponseSchema = z.object({
-  status: z.string(),
+  status: z.enum(['ok', 'degraded']),
   timestamp: z.number(),
+  checks: z.record(z.string(), z.enum(['ok', 'error', 'unavailable'])).optional(),
 });
 
 // Stats response
