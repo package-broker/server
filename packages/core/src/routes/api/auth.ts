@@ -289,7 +289,7 @@ export async function sessionMiddleware(c: Context, next: () => Promise<void>): 
   // Check cache for session (use injected cache or fall back to c.env.KV)
   const cache = c.get('cache') || c.env?.KV;
   if (!cache) {
-    return c.json({ error: 'Server Error', message: 'Session storage not configured' }, 500);
+    return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
   }
 
   // Try to get session - handle both CachePort (getJson) and KV (get with 'json' type)
