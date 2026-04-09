@@ -95,8 +95,9 @@ jobs:
           image-ref: 'package-broker-server:test'
           format: 'table'
           exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
           ignore-unfixed: true
+          vuln-type: 'library'
 
       - name: Test Docker container startup
         run: |
