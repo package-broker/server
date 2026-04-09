@@ -148,5 +148,82 @@ export const users = sqliteTable(
   })
 );
 
+// Organizations table
+export const organizations = sqliteTable(
+  'organizations',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    owner_user_id: text('owner_user_id')
+      .notNull()
+      .references(() => users.id),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    slugUnique: unique('organizations_slug_unique').on(table.slug),
+  })
+);
+
+// Tenants table
+export const tenants = sqliteTable(
+  'tenants',
+  {
+    id: text('id').primaryKey(),
+    org_id: text('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    orgIdIdx: index('idx_tenants_org_id').on(table.org_id),
+    orgSlugUnique: unique('tenants_org_slug_unique').on(table.org_id, table.slug),
+  })
+);
+
+// Organization members table
+export const organizationMembers = sqliteTable(
+  'organization_members',
+  {
+    id: text('id').primaryKey(),
+    organization_id: text('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('member'),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    orgIdIdx: index('idx_org_members_org_id').on(table.organization_id),
+    userIdIdx: index('idx_org_members_user_id').on(table.user_id),
+    orgUserUnique: unique('org_members_org_user_unique').on(table.organization_id, table.user_id),
+  })
+);
+
+// Tenant packages table
+export const tenantPackages = sqliteTable(
+  'tenant_packages',
+  {
+    id: text('id').primaryKey(),
+    tenant_id: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    package_pattern: text('package_pattern').notNull(),
+    access_level: text('access_level').notNull().default('read'),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('idx_tenant_packages_tenant_id').on(table.tenant_id),
+    tenantPatternUnique: unique('tenant_packages_tenant_pattern_unique').on(
+      table.tenant_id,
+      table.package_pattern
+    ),
+  })
+);
+
 // NO activity_log table - use Cloudflare Workers logs for debugging
 // Workers logs are limited to last X entries and don't require database storage
