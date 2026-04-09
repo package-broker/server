@@ -16,7 +16,7 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@package-broker/shared": "^0.17.4",
+    "@package-broker/shared": "^0.18.0",
     "@tanstack/react-query": "^5.90.16",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
