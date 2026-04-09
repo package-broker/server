@@ -294,6 +294,7 @@ export function createApp(options?: {
 
             return c.json(fullSpec);
         } catch (error) {
+            const reqId = c.get('requestId') as string | undefined;
             logger.error(
                 'Error generating OpenAPI spec',
                 {
@@ -306,7 +307,7 @@ export function createApp(options?: {
                 {
                     error: 'Internal Server Error',
                     message: 'An unexpected error occurred',
-                    ...(requestId && { requestId }),
+                    ...(reqId && { requestId: reqId }),
                 },
                 500
             );
