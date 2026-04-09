@@ -24,17 +24,6 @@ vi.mock('../utils/analytics', () => ({
     }),
 }));
 
-// Mock DB - limited since we focus on KV path
-vi.mock('../db', () => ({
-    createD1Database: () => ({
-        select: () => ({
-            from: () => ({
-                where: () => Promise.resolve([]), // Return empty result
-            }),
-        }),
-    }),
-}));
-
 describe('p2PackageRoute', () => {
     it('should handle double-encoded string in KV cache gracefully', async () => {
         // Scenario: KV contains a JSON string that evaluates to a STRING, not an object/array.

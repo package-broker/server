@@ -6,8 +6,6 @@ export * from './middleware';
 export * from './routes';
 export * from './storage/index';
 export * from './cache/index';
-// Explicitly export KVCacheDriver for better TypeScript support
-export { KVCacheDriver } from './cache/kv-driver.js';
 export * from './queue/index';
 export * from './sync';
 export * from './queue';

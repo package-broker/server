@@ -24,7 +24,11 @@ export class RedisDriver implements CachePort, QueuePort {
         }
     }
 
-    async put(key: string, value: string | ReadableStream | ArrayBuffer | FormData, options?: { expirationTtl?: number }): Promise<void> {
+    async put(
+        key: string,
+        value: string | ReadableStream | ArrayBuffer | ArrayBufferView,
+        options?: { expirationTtl?: number }
+    ): Promise<void> {
         let stringValue: string;
 
         if (typeof value === 'string') {

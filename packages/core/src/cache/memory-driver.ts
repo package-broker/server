@@ -43,7 +43,11 @@ export class MemoryCacheDriver implements CachePort {
   }
 
   // Overload signature implementation to match interface
-  async put(key: string, value: string | ReadableStream | ArrayBuffer | FormData, options?: { expirationTtl?: number }): Promise<void> {
+  async put(
+    key: string,
+    value: string | ReadableStream | ArrayBuffer | ArrayBufferView,
+    options?: { expirationTtl?: number }
+  ): Promise<void> {
     const expiresAt = options?.expirationTtl ? Date.now() + (options.expirationTtl * 1000) : undefined;
     
     // For simplicity in memory driver, we convert everything to string or store as is if it's simple
@@ -52,10 +56,14 @@ export class MemoryCacheDriver implements CachePort {
     
     const storedValue: any = value;
     
-    if (value instanceof ReadableStream || value instanceof ArrayBuffer || value instanceof FormData) {
+    if (
+      value instanceof ReadableStream ||
+      value instanceof ArrayBuffer ||
+      ArrayBuffer.isView(value)
+    ) {
         // In a real memory implementation we might want to buffer this, 
         // but for CachePort usage in this app, it's mostly strings/JSON.
-        console.warn('MemoryCacheDriver: complex types (Stream/Buffer/FormData) are not fully supported, storing as reference.');
+        console.warn('MemoryCacheDriver: complex types (Stream/Buffer) are not fully supported, storing as reference.');
     }
 
     this.cache.set(key, { value: storedValue, expiresAt });

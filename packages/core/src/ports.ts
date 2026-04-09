@@ -41,7 +41,11 @@ export interface DatabaseDriver {
 export interface CachePort {
     get(key: string): Promise<string | null>;
     get<T>(key: string, type: 'json'): Promise<T | null>;
-    put(key: string, value: string | ReadableStream | ArrayBuffer | FormData, options?: { expirationTtl?: number }): Promise<void>;
+    put(
+        key: string,
+        value: string | ReadableStream | ArrayBuffer | ArrayBufferView,
+        options?: { expirationTtl?: number }
+    ): Promise<void>;
     delete(key: string): Promise<void>;
 }
 

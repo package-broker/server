@@ -3,5 +3,3 @@ export type Database = any;
 
 export * as schema from './schema';
 export * from './schema';
-export * from './d1-driver';
-
