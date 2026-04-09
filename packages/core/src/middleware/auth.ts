@@ -4,13 +4,28 @@ import type { Context } from 'hono';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { DatabasePort } from '../ports';
-import { tokens } from '../db/schema';
+import { tokens, tokenScopes } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { TokenScopeService } from '../services/TokenScopeService';
+
+const VALID_SCOPE_TYPES = new Set(['repository', 'package_pattern']);
+
+async function loadTokenScopes(db: DatabasePort, tokenId: string): Promise<TokenScopeService> {
+  const scopeRows = await db
+    .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
+    .from(tokenScopes)
+    .where(eq(tokenScopes.token_id, tokenId));
+  const validScopes = scopeRows.filter((row: { scope_type: string; scope_value: string }) => VALID_SCOPE_TYPES.has(row.scope_type));
+  return new TokenScopeService(
+    validScopes as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
+  );
+}
 
 export interface AuthContext {
   tokenId: string;
   tokenDescription: string;
   tokenPermissions: 'readonly' | 'write';
+  scopeService: TokenScopeService;
 }
 
 /**
@@ -207,11 +222,14 @@ export async function distAuthMiddleware(
     return c.json({ error: 'Too Many Requests', message: 'Rate limit exceeded' }, 429);
   }
 
+  const scopeService = await loadTokenScopes(db, tokenRecord.id);
+
   // Attach token info to context
   c.set('auth', {
     tokenId: tokenRecord.id,
     tokenDescription: tokenRecord.description,
     tokenPermissions: (tokenRecord.permissions || 'readonly') as 'readonly' | 'write',
+    scopeService,
   });
 
   // Update last_used_at (non-blocking)
@@ -335,11 +353,14 @@ export async function authMiddleware(
     );
   }
 
+  const scopeService = await loadTokenScopes(db, tokenRecord.id);
+
   // Attach token info to context
   c.set('auth', {
     tokenId: tokenRecord.id,
     tokenDescription: tokenRecord.description,
     tokenPermissions: (tokenRecord.permissions || 'readonly') as 'readonly' | 'write',
+    scopeService,
   });
 
   // Track token usage analytics
