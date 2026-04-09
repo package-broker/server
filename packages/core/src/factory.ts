@@ -220,7 +220,6 @@ export function createApp(options?: {
     // The handler executes at request time when all routes are registered
     app.get('/api/openapi.json', async (c) => {
         try {
-            const requestId = c.get('requestId') as string | undefined;
             const auth = await checkAuthentication(c);
             const fullSpec = app.getOpenAPIDocument({
                 openapi: '3.0.0',
