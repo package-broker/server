@@ -75,7 +75,7 @@ export function createApp(options?: {
         return c.json(
             {
                 error: 'Internal Server Error',
-                message: err.message,
+                message: 'An unexpected error occurred',
                 ...(requestId && { requestId }),
             },
             500
@@ -220,6 +220,7 @@ export function createApp(options?: {
     // The handler executes at request time when all routes are registered
     app.get('/api/openapi.json', async (c) => {
         try {
+            const requestId = c.get('requestId') as string | undefined;
             const auth = await checkAuthentication(c);
             const fullSpec = app.getOpenAPIDocument({
                 openapi: '3.0.0',
@@ -304,7 +305,8 @@ export function createApp(options?: {
             return c.json(
                 {
                     error: 'Internal Server Error',
-                    message: error instanceof Error ? error.message : String(error),
+                    message: 'An unexpected error occurred',
+                    ...(requestId && { requestId }),
                 },
                 500
             );
