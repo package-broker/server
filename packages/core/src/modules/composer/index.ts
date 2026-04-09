@@ -18,6 +18,11 @@ import {
   distMirrorRoute,
   distLockfileRoute,
 } from './composer.handlers';
+import {
+  tenantPackagesJsonRoute,
+  tenantP2Route,
+  tenantDistRoute,
+} from './tenant-composer';
 
 /**
  * Mount Composer routes directly on the app at root level
@@ -52,6 +57,11 @@ export function mountComposerRoutes(app: AppInstance): void {
 
   // GET /dist/:repo_id/:vendor/:package/:version - repository-specific format
   app.get('/dist/:repo_id/:vendor/:package/:version', composerAuth, distAuth, distRoute);
+
+  // Tenant-scoped Composer routes (org-qualified to prevent cross-org ambiguity)
+  app.get('/org/:orgSlug/t/:tenantSlug/packages.json', composerAuth, composerTokenAuth, tenantPackagesJsonRoute);
+  app.get('/org/:orgSlug/t/:tenantSlug/p2/:vendor/:package', composerAuth, composerTokenAuth, tenantP2Route);
+  app.get('/org/:orgSlug/t/:tenantSlug/dists/:vendor/:package/:version/:reference', composerAuth, distAuth, tenantDistRoute);
 }
 
 // Re-export handlers for use by other modules if needed
