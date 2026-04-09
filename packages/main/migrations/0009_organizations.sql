@@ -2,7 +2,7 @@ CREATE TABLE organizations (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
-  owner_user_id TEXT NOT NULL REFERENCES users(id),
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   created_at INTEGER NOT NULL,
   CONSTRAINT organizations_slug_unique UNIQUE(slug)
 );
@@ -43,3 +43,7 @@ CREATE INDEX idx_tenant_packages_tenant_id ON tenant_packages(tenant_id);
 ALTER TABLE tokens ADD COLUMN tenant_id TEXT REFERENCES tenants(id);
 ALTER TABLE tokens ADD COLUMN org_id TEXT REFERENCES organizations(id);
 ALTER TABLE repositories ADD COLUMN org_id TEXT REFERENCES organizations(id);
+
+CREATE INDEX idx_tokens_tenant_id ON tokens(tenant_id);
+CREATE INDEX idx_tokens_org_id ON tokens(org_id);
+CREATE INDEX idx_repositories_org_id ON repositories(org_id);

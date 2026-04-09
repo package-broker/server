@@ -160,7 +160,7 @@ export const organizations = sqliteTable(
     slug: text('slug').notNull(),
     owner_user_id: text('owner_user_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: 'restrict' }),
     created_at: integer('created_at').notNull(),
   },
   (table) => ({
