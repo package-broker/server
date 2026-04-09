@@ -89,6 +89,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'package-broker-server:test'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
       - name: Test Docker container startup
         run: |
           set -euo pipefail
@@ -97,11 +106,12 @@ jobs:
           CONTAINER_ID=$(docker run -d \
             -p 3000:3000 \
             -e DB_DRIVER=sqlite \
-            -e DB_URL="/tmp/test.db" \
+            -e DB_URL="/data/test.db" \
             -e STORAGE_DRIVER=fs \
-            -e STORAGE_FS_PATH="/tmp/storage" \
+            -e STORAGE_PATH="/data/storage" \
             -e CACHE_DRIVER=memory \
             -e QUEUE_DRIVER=memory \
+            -e ENCRYPTION_KEY="test-encryption-key-32-bytes-long" \
             package-broker-server:test)
           
           echo "Container ID: $CONTAINER_ID"
