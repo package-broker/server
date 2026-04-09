@@ -19,6 +19,8 @@ import packagesModule from './modules/packages';
 import artifactsModule from './modules/artifacts';
 import { statsModule, settingsModule } from './modules/admin';
 import { mountComposerRoutes } from './modules/composer';
+import organizationsModule from './modules/organizations';
+import tenantsModule from './modules/tenants';
 import { getPackageStatsRouteDef } from './modules/admin/admin.routes';
 import { getPackageStats } from './modules/admin/admin.handlers';
 
@@ -200,6 +202,16 @@ export function createApp(options?: {
     protectedRoutes.route('/packages', packagesModule);
     protectedRoutes.route('/artifacts', artifactsModule);
     protectedRoutes.route('/import', importModule);
+    protectedRoutes.route('/organizations', organizationsModule);
+
+    // Mount tenants under organizations with org_id middleware
+    const orgTenantsRoutes = new OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>();
+    orgTenantsRoutes.use('*', async (c: any, next: any) => {
+        c.set('org_id', c.req.param('org_id'));
+        await next();
+    });
+    orgTenantsRoutes.route('/', tenantsModule);
+    protectedRoutes.route('/organizations/:org_id/tenants', orgTenantsRoutes);
     
     // Admin module - split into separate modules to avoid route collisions
     protectedRoutes.route('/stats', statsModule);
