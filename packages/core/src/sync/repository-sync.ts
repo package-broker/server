@@ -277,6 +277,7 @@ async function storePackages(
       .from(packagesTable)
       .where(
         and(
+          eq(packagesTable.repo_id, repoId),
           eq(packagesTable.name, pkg.name),
           eq(packagesTable.version, pkg.version)
         )
@@ -289,7 +290,7 @@ async function storePackages(
     // Use upstream time if available, otherwise use first-seen date (created_at)
     const releasedAt = parseReleaseTime(pkg.time, firstSeenAt);
 
-    // Upsert package (use unique constraint on name+version)
+    // Upsert package (use unique constraint on repo_id+name+version)
     try {
       await db.insert(packagesTable).values({
         id: nanoid(),
@@ -308,7 +309,7 @@ async function storePackages(
         metadata: pkg.rawMetadata ? JSON.stringify(pkg.rawMetadata) : null,
         created_at: firstSeenAt,
       }).onConflictDoUpdate({
-        target: [packagesTable.name, packagesTable.version],
+        target: [packagesTable.repo_id, packagesTable.name, packagesTable.version],
         set: {
           dist_url: proxyDistUrl,
           source_dist_url: sourceDistUrl,

@@ -1280,7 +1280,7 @@ export async function transformPackageDistUrls(
       const allVersions = await db
         .select()
         .from(packages)
-        .where(inArray(packages.name, nameChunk));
+        .where(and(eq(packages.repo_id, repoId), inArray(packages.name, nameChunk)));
 
       // Add all results to map
       for (const existing of allVersions) {
@@ -1361,9 +1361,8 @@ export async function transformPackageDistUrls(
                 .insert(packages)
                 .values(pkgData)
                 .onConflictDoUpdate({
-                  target: [packages.name, packages.version],
+                  target: [packages.repo_id, packages.name, packages.version],
                   set: {
-                    repo_id: pkgData.repo_id,
                     dist_url: pkgData.dist_url,
                     source_dist_url: pkgData.source_dist_url,
                     dist_reference: pkgData.dist_reference,
@@ -1465,7 +1464,13 @@ export async function storePackageInDB(
   const [existing] = await db
     .select()
     .from(packages)
-    .where(and(eq(packages.name, packageName), eq(packages.version, version)))
+    .where(
+      and(
+        eq(packages.repo_id, repoId),
+        eq(packages.name, packageName),
+        eq(packages.version, version)
+      )
+    )
     .limit(1);
 
   // Use existing reference or generate simple one (no expensive crypto)
@@ -1503,7 +1508,6 @@ export async function storePackageInDB(
     await db
       .update(packages)
       .set({
-        repo_id: repoId, // Update repo_id in case it changed
         dist_url: proxyDistUrl,
         source_dist_url: sourceDistUrl,
         dist_reference: distReference,
@@ -1514,7 +1518,13 @@ export async function storePackageInDB(
         released_at: releasedAt,
         metadata: packageData.metadata, // Update metadata
       })
-      .where(and(eq(packages.name, packageName), eq(packages.version, version)));
+      .where(
+        and(
+          eq(packages.repo_id, repoId),
+          eq(packages.name, packageName),
+          eq(packages.version, version)
+        )
+      );
   } else {
     await db.insert(packages).values(packageData);
   }
