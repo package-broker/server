@@ -76,6 +76,14 @@ describe('TokenScopeService', () => {
     expect(service.getAuthorizedRepoIds()).toEqual(['repo-1', 'repo-2']);
   });
 
+  it('should deny canAccessPackage when only repo scopes exist (no patterns)', () => {
+    const service = new TokenScopeService([
+      { scope_type: 'repository', scope_value: 'repo-1' },
+    ]);
+    // canAccessPackage only checks pattern scopes, not repo scopes
+    expect(service.canAccessPackage('vendor/pkg')).toBe(false);
+  });
+
   it('should return null for package patterns when unscoped', () => {
     const service = new TokenScopeService([]);
     expect(service.getPackagePatterns()).toBeNull();

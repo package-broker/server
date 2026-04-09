@@ -8,6 +8,16 @@ import { tokens, tokenScopes } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { TokenScopeService } from '../services/TokenScopeService';
 
+async function loadTokenScopes(db: DatabasePort, tokenId: string): Promise<TokenScopeService> {
+  const scopeRows = await db
+    .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
+    .from(tokenScopes)
+    .where(eq(tokenScopes.token_id, tokenId));
+  return new TokenScopeService(
+    scopeRows as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
+  );
+}
+
 export interface AuthContext {
   tokenId: string;
   tokenDescription: string;
@@ -209,14 +219,7 @@ export async function distAuthMiddleware(
     return c.json({ error: 'Too Many Requests', message: 'Rate limit exceeded' }, 429);
   }
 
-  // Load token scopes for access control
-  const scopeRows = await db
-    .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
-    .from(tokenScopes)
-    .where(eq(tokenScopes.token_id, tokenRecord.id));
-  const scopeService = new TokenScopeService(
-    scopeRows as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
-  );
+  const scopeService = await loadTokenScopes(db, tokenRecord.id);
 
   // Attach token info to context
   c.set('auth', {
@@ -347,14 +350,7 @@ export async function authMiddleware(
     );
   }
 
-  // Load token scopes for access control
-  const scopeRows = await db
-    .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
-    .from(tokenScopes)
-    .where(eq(tokenScopes.token_id, tokenRecord.id));
-  const scopeService = new TokenScopeService(
-    scopeRows as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
-  );
+  const scopeService = await loadTokenScopes(db, tokenRecord.id);
 
   // Attach token info to context
   c.set('auth', {
