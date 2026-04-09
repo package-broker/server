@@ -14,6 +14,7 @@ import systemModule from './modules/system';
 import usersModule from './modules/users';
 import repositoriesModule from './modules/repositories';
 import tokensModule from './modules/tokens';
+import importModule from './modules/import';
 import packagesModule from './modules/packages';
 import artifactsModule from './modules/artifacts';
 import { statsModule, settingsModule } from './modules/admin';
@@ -198,6 +199,7 @@ export function createApp(options?: {
     protectedRoutes.route('/tokens', tokensModule);
     protectedRoutes.route('/packages', packagesModule);
     protectedRoutes.route('/artifacts', artifactsModule);
+    protectedRoutes.route('/import', importModule);
     
     // Admin module - split into separate modules to avoid route collisions
     protectedRoutes.route('/stats', statsModule);
