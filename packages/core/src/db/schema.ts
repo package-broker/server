@@ -15,6 +15,7 @@ export const repositories = sqliteTable(
     error_message: text('error_message'),
     last_synced_at: integer('last_synced_at'),
     created_at: integer('created_at').notNull(),
+    org_id: text('org_id').references(() => organizations.id),
   },
   (table) => ({
     statusIdx: index('idx_repositories_status').on(table.status),
@@ -36,6 +37,8 @@ export const tokens = sqliteTable(
     created_at: integer('created_at').notNull(),
     expires_at: integer('expires_at'),
     last_used_at: integer('last_used_at'),
+    tenant_id: text('tenant_id').references(() => tenants.id),
+    org_id: text('org_id').references(() => organizations.id),
   },
   (table) => ({
     tokenHashIdx: index('idx_tokens_token_hash').on(table.token_hash),
@@ -145,6 +148,83 @@ export const users = sqliteTable(
   (table) => ({
     emailIdx: index('idx_users_email').on(table.email),
     inviteTokenIdx: index('idx_users_invite_token').on(table.invite_token),
+  })
+);
+
+// Organizations table
+export const organizations = sqliteTable(
+  'organizations',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    owner_user_id: text('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    slugUnique: unique('organizations_slug_unique').on(table.slug),
+  })
+);
+
+// Tenants table
+export const tenants = sqliteTable(
+  'tenants',
+  {
+    id: text('id').primaryKey(),
+    org_id: text('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    orgIdIdx: index('idx_tenants_org_id').on(table.org_id),
+    orgSlugUnique: unique('tenants_org_slug_unique').on(table.org_id, table.slug),
+  })
+);
+
+// Organization members table
+export const organizationMembers = sqliteTable(
+  'organization_members',
+  {
+    id: text('id').primaryKey(),
+    org_id: text('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('member'), // 'owner' | 'admin' | 'member'
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    orgIdIdx: index('idx_org_members_org_id').on(table.org_id),
+    userIdIdx: index('idx_org_members_user_id').on(table.user_id),
+    orgUserUnique: unique('org_members_org_user_unique').on(table.org_id, table.user_id),
+  })
+);
+
+// Tenant packages table
+export const tenantPackages = sqliteTable(
+  'tenant_packages',
+  {
+    id: text('id').primaryKey(),
+    tenant_id: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    package_pattern: text('package_pattern').notNull(),
+    access_level: text('access_level').notNull().default('read'),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('idx_tenant_packages_tenant_id').on(table.tenant_id),
+    tenantPatternUnique: unique('tenant_packages_tenant_pattern_unique').on(
+      table.tenant_id,
+      table.package_pattern
+    ),
   })
 );
 
