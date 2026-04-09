@@ -6,7 +6,7 @@
 
 // Queue consumer for async database updates
 
-import { createD1Database } from '../db';
+import { createDatabase } from '../db/create-database';
 import { tokens, artifacts, repositories } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import type { QueueMessage } from './types';
@@ -24,7 +24,7 @@ export async function processQueueMessage(
   message: QueueMessage,
   env: QueueConsumerEnv
 ): Promise<void> {
-  const db = createD1Database(env.DB);
+  const db = createDatabase(env.DB);
 
   switch (message.type) {
     case 'update_token_last_used': {
@@ -96,7 +96,6 @@ export default {
     await Promise.all(promises);
   },
 };
-
 
 
 

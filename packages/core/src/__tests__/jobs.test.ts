@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createJobProcessor } from '../jobs/processor';
 import { syncRepository } from '../sync/repository-sync';
-import { createD1Database as createDatabase } from '../db';
+import { createDatabase } from '../db/create-database';
 import { tokens, artifacts } from '../db/schema';
 
 vi.mock('../sync/repository-sync');
-vi.mock('../db');
+vi.mock('../db/create-database');
 vi.mock('../utils/logger', () => ({
     getLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
 }));
@@ -28,7 +28,7 @@ describe('Job Processor', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (createDatabase as any).mockReturnValue(mockDb);
+        vi.mocked(createDatabase).mockReturnValue(mockDb as never);
     });
 
     describe('Factory', () => {

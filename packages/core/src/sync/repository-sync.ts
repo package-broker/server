@@ -6,7 +6,8 @@
 
 // Main repository sync orchestrator
 
-import { createD1Database, type Database } from '../db';
+import type { Database } from '../db';
+import { createDatabase } from '../db/create-database';
 import { repositories, packages as packagesTable } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { decryptCredentials } from '../utils/encryption';
@@ -41,7 +42,7 @@ export async function syncRepository(
   env: SyncEnv,
   options: SyncOptions
 ): Promise<SyncResult> {
-  const db = createD1Database(env.DB);
+  const db = createDatabase(env.DB);
 
   // Get repository details
   const [repo] = await db
@@ -326,4 +327,3 @@ async function storePackages(
     }
   }
 }
-

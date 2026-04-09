@@ -1,4 +1,4 @@
-import type { CachePort } from '../ports.js';
+import type { CachePort } from '@package-broker/core';
 
 /**
  * Cloudflare KV cache driver
@@ -17,14 +17,13 @@ export class KVCacheDriver implements CachePort {
 
   async put(
     key: string,
-    value: string | ReadableStream | ArrayBuffer | FormData,
+    value: string | ReadableStream | ArrayBuffer | ArrayBufferView,
     options?: { expirationTtl?: number }
   ): Promise<void> {
-    await this.kv.put(key, value as any, options);
+    await this.kv.put(key, value, options);
   }
 
   async delete(key: string): Promise<void> {
     await this.kv.delete(key);
   }
 }
-

@@ -1,9 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UserService } from '../services/UserService';
-import { createD1Database as createDatabase } from '../db';
-
-vi.mock('../db');
 
 describe('UserService', () => {
     const mockDb = {
@@ -25,7 +22,6 @@ describe('UserService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (createDatabase as any).mockReturnValue(mockDb);
     });
 
     it('should create a new user', async () => {

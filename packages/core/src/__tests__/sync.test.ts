@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { syncRepository } from '../sync/repository-sync';
-import { createD1Database as createDatabase } from '../db';
+import { createDatabase } from '../db/create-database';
 import { decryptCredentials } from '../utils/encryption';
 import { syncGitHubRepository } from '../sync/github-sync';
 import { syncComposerRepository } from '../sync/strategies/composer-repo';
 
-vi.mock('../db');
+vi.mock('../db/create-database');
 vi.mock('../utils/encryption');
 vi.mock('../sync/github-sync');
 vi.mock('../sync/strategies/composer-repo');
@@ -46,7 +46,7 @@ describe('Repository Sync', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (createDatabase as any).mockReturnValue(mockDb);
+        vi.mocked(createDatabase).mockReturnValue(mockDb as never);
     });
 
     it('should sync GitHub repository successfully', async () => {

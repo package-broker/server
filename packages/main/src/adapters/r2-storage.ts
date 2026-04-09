@@ -1,6 +1,4 @@
-// Cloudflare R2 storage driver
-
-import type { StorageDriver } from './driver';
+import type { StorageDriver } from '@package-broker/core';
 
 export interface R2DriverConfig {
   bucket: R2Bucket;
@@ -17,6 +15,7 @@ export class R2Driver implements StorageDriver {
     if (!object) {
       return null;
     }
+
     return object.body;
   }
 
@@ -33,4 +32,3 @@ export class R2Driver implements StorageDriver {
     return object !== null;
   }
 }
-

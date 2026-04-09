@@ -7,7 +7,8 @@
 // Package Storage Workflow - Durable background processing for D1 storage
 
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers';
-import { createD1Database } from '../db';
+import type { Database } from '../db';
+import { createDatabase } from '../db/create-database';
 import { repositories } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { encryptCredentials } from '../utils/encryption';
@@ -68,7 +69,7 @@ export class PackageStorageWorkflow extends WorkflowEntrypoint<PackageStorageEnv
         timeout: '30 seconds',
       },
       async () => {
-        const db = createD1Database(this.env.DB);
+        const db = createDatabase(this.env.DB);
         await this.ensureRepository(db, repoId);
         logger.debug('Repository ensured', { repoId });
       }
@@ -86,7 +87,7 @@ export class PackageStorageWorkflow extends WorkflowEntrypoint<PackageStorageEnv
         timeout: '10 minutes', // Package storage can take time for large packages
       },
       async () => {
-        const db = createD1Database(this.env.DB);
+        const db = createDatabase(this.env.DB);
         const { transformPackageDistUrls } = await import('../routes/composer');
 
         const { storedCount, errors } = await transformPackageDistUrls(
@@ -130,7 +131,7 @@ export class PackageStorageWorkflow extends WorkflowEntrypoint<PackageStorageEnv
    * For Packagist, creates the repository entry if missing
    */
   private async ensureRepository(
-    db: ReturnType<typeof createD1Database>,
+    db: Database,
     repoId: string
   ): Promise<void> {
     // For Packagist, we need to ensure the repository entry exists
@@ -190,5 +191,4 @@ export class PackageStorageWorkflow extends WorkflowEntrypoint<PackageStorageEnv
     }
   }
 }
-
 

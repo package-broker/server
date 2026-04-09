@@ -7,7 +7,7 @@
 // Job Processor - abstraction for sync/async job execution
 // Automatically falls back to synchronous execution when Queues are unavailable
 
-import { createD1Database as createDatabase } from '../db';
+import { createDatabase } from '../db/create-database';
 import { tokens, artifacts } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { syncRepository, type SyncEnv, type SyncOptions } from '../sync/repository-sync';
@@ -177,7 +177,6 @@ class SyncJobProcessor implements JobProcessor {
     }
   }
 }
-
 
 
 
