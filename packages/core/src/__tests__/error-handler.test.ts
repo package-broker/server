@@ -18,7 +18,7 @@ describe('Global error handler', () => {
     const res = await app.request('/test-error');
     expect(res.status).toBe(500);
 
-    const body = await res.json();
+    const body = await res.json() as { error: string; message: string; requestId?: string };
     expect(body.error).toBe('Internal Server Error');
     expect(body.message).toBe('An unexpected error occurred');
     expect(body.message).not.toContain('SQL');
