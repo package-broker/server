@@ -46,14 +46,17 @@ interface TenantContext {
  */
 async function resolveTenant(c: Context<TenantComposerEnv>): Promise<TenantContext | null> {
   const db = c.get('database');
-  const orgSlug = c.req.param('orgSlug');
-  const tenantSlug = c.req.param('tenantSlug');
+  const rawOrgSlug = c.req.param('orgSlug');
+  const rawTenantSlug = c.req.param('tenantSlug');
 
-  if (!orgSlug || !tenantSlug) {
+  if (!rawOrgSlug || !rawTenantSlug) {
     c.status(400);
     c.body('Bad Request');
     return null;
   }
+
+  const orgSlug = decodeURIComponent(rawOrgSlug);
+  const tenantSlug = decodeURIComponent(rawTenantSlug);
 
   // Tenant routes REQUIRE token auth (not session-based)
   const auth = c.get('auth') as AuthContext | undefined;
@@ -96,20 +99,24 @@ async function resolveTenant(c: Context<TenantComposerEnv>): Promise<TenantConte
     .where(eq(tokens.id, auth.tokenId))
     .limit(1);
 
-  if (tokenRecord) {
-    // If token is scoped to a specific tenant, it must match
-    if (tokenRecord.tenant_id && tokenRecord.tenant_id !== tenant.id) {
-      c.status(403);
-      c.body('Token is not authorized for this tenant');
-      return null;
-    }
+  if (!tokenRecord) {
+    c.status(401);
+    c.body('Token not found');
+    return null;
+  }
 
-    // If token is scoped to an org, it must match
-    if (tokenRecord.org_id && tokenRecord.org_id !== org.id) {
-      c.status(403);
-      c.body('Token is not authorized for this organization');
-      return null;
-    }
+  // If token is scoped to a specific tenant, it must match
+  if (tokenRecord.tenant_id && tokenRecord.tenant_id !== tenant.id) {
+    c.status(403);
+    c.body('Token is not authorized for this tenant');
+    return null;
+  }
+
+  // If token is scoped to an org, it must match
+  if (tokenRecord.org_id && tokenRecord.org_id !== org.id) {
+    c.status(403);
+    c.body('Token is not authorized for this organization');
+    return null;
   }
 
   // Load tenant's package patterns
@@ -220,7 +227,9 @@ export async function tenantP2Route(c: Context<TenantComposerEnv>): Promise<Resp
     return c.json({ error: 'Forbidden', message: 'Package not authorized for this tenant' }, 403);
   }
 
-  // Delegate to main p2 handler in-process (no HTTP fetch)
+  // Delegate to main p2 handler in-process (no HTTP fetch).
+  // Cast needed: TenantComposerEnv is a subset of ComposerRouteEnv (same Variables shape).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return p2PackageRoute(c as any);
 }
 
@@ -247,6 +256,8 @@ export async function tenantDistRoute(c: Context<TenantComposerEnv>): Promise<Re
     return c.json({ error: 'Forbidden', message: 'Package not authorized for this tenant' }, 403);
   }
 
-  // Delegate to main dist handler in-process (no HTTP fetch)
+  // Delegate to main dist handler in-process (no HTTP fetch).
+  // Cast needed: TenantComposerEnv is a subset of DistRouteEnv (same Variables shape).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return distLockfileRoute(c as any);
 }
