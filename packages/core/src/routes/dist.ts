@@ -1355,27 +1355,34 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
 export const distMirrorRoute = distRoute;
 export const distLockfileRoute = distRoute;
 
+/** Maximum decompressed size: 100 MB (prevents zip/gzip bombs) */
+const MAX_DECOMPRESSED_SIZE = 100 * 1024 * 1024;
+
 /**
  * Detect if binary data is a TAR archive.
- * Checks for ZIP first (to avoid false positives), then gzip, then ustar magic.
+ * Checks for ZIP first (to avoid false positives), then gzip (single layer), then ustar magic.
  */
-function isTarArchive(data: Uint8Array): boolean {
-  if (data.length < 264) return false;
-
+function isTarArchive(data: Uint8Array, depth = 0): boolean {
   // ZIP magic bytes — not a TAR
-  if (data[0] === 0x50 && data[1] === 0x4B && data[2] === 0x03 && data[3] === 0x04) {
+  if (data.length >= 4 && data[0] === 0x50 && data[1] === 0x4B && data[2] === 0x03 && data[3] === 0x04) {
     return false;
   }
 
-  // Gzip magic — decompress first, then check inner TAR
-  if (data[0] === 0x1f && data[1] === 0x8b) {
+  // Gzip magic — decompress one layer only (depth limit prevents recursive bombs)
+  // Check before the length gate since gzipped TARs can be smaller than 264 bytes
+  if (data.length >= 2 && data[0] === 0x1f && data[1] === 0x8b) {
+    if (depth > 0) return false;
     try {
       const decompressed = gunzipSync(data);
-      return isTarArchive(decompressed);
+      if (decompressed.length > MAX_DECOMPRESSED_SIZE) return false;
+      return isTarArchive(decompressed, depth + 1);
     } catch {
       return false;
     }
   }
+
+  // Need at least 264 bytes to check UStar magic at offset 257
+  if (data.length < 264) return false;
 
   // UStar magic at offset 257
   const ustarMagic = String.fromCharCode(...data.slice(257, 263));
@@ -1383,17 +1390,34 @@ function isTarArchive(data: Uint8Array): boolean {
 }
 
 /**
+ * Sanitize a TAR entry path to prevent directory traversal.
+ * Splits on /, removes .., ., and empty segments, then rejoins.
+ */
+function sanitizeTarPath(name: string): string {
+  return name
+    .replace(/\\/g, '/') // normalize backslashes
+    .split('/')
+    .filter(seg => seg !== '..' && seg !== '.' && seg !== '')
+    .join('/');
+}
+
+/**
  * Convert a TAR (or .tar.gz) archive to ZIP format in memory.
  * Handles gzip-compressed input automatically.
+ * Supports PAX extended headers (type 'x') and GNU long filenames (type 'L').
  */
 function convertTarToZip(data: Uint8Array): Uint8Array {
   // Decompress gzip if needed
   if (data[0] === 0x1f && data[1] === 0x8b) {
     data = gunzipSync(data);
+    if (data.length > MAX_DECOMPRESSED_SIZE) {
+      throw new Error(`Decompressed archive exceeds ${MAX_DECOMPRESSED_SIZE} byte limit`);
+    }
   }
 
   const files: Record<string, Uint8Array> = {};
   let offset = 0;
+  let nextLongName: string | null = null; // For GNU long filename (type 'L')
 
   while (offset + 512 <= data.length) {
     // Check for end-of-archive (two consecutive zero blocks)
@@ -1421,21 +1445,50 @@ function convertTarToZip(data: Uint8Array): Uint8Array {
     }
     const size = parseInt(sizeStr, 8) || 0;
 
-    // Type flag (byte 156): '0' or '\0' = regular file
+    // Type flag (byte 156)
     const typeFlag = header[156];
     offset += 512;
 
+    // Handle GNU long filename (type 'L' = 76)
+    if (typeFlag === 76 && size > 0) {
+      const longNameBytes = data.slice(offset, offset + size);
+      let longName = new TextDecoder().decode(longNameBytes);
+      // Strip null terminator if present
+      if (longName.endsWith('\0')) longName = longName.slice(0, -1);
+      nextLongName = longName;
+      offset += Math.ceil(size / 512) * 512;
+      continue;
+    }
+
+    // Handle PAX extended header (type 'x' = 120)
+    if (typeFlag === 120 && size > 0) {
+      const paxBytes = data.slice(offset, offset + size);
+      const paxStr = new TextDecoder().decode(paxBytes);
+      // Parse PAX records for path= entry
+      const pathMatch = paxStr.match(/\d+ path=(.+)\n/);
+      if (pathMatch) {
+        nextLongName = pathMatch[1];
+      }
+      offset += Math.ceil(size / 512) * 512;
+      continue;
+    }
+
+    // Skip PAX global header (type 'g' = 103) and GNU long link (type 'K' = 75)
+    if (typeFlag === 103 || typeFlag === 75) {
+      offset += Math.ceil(size / 512) * 512;
+      continue;
+    }
+
+    // Use long name from previous GNU/PAX entry if available
+    if (nextLongName) {
+      name = nextLongName;
+      nextLongName = null;
+    }
+
+    // Regular file: type '0' (48) or null (0)
     if ((typeFlag === 48 || typeFlag === 0) && size > 0 && name && !name.endsWith('/')) {
       const fileData = data.slice(offset, offset + size);
-      // Sanitize path: resolve traversal sequences then strip leading /
-      // Use a loop to handle nested evasion patterns like '....//'' → '../'
-      let safeName = name;
-      let prev: string;
-      do {
-        prev = safeName;
-        safeName = safeName.replace(/\.\.\//g, '');
-      } while (safeName !== prev);
-      safeName = safeName.replace(/^\/+/, '');
+      const safeName = sanitizeTarPath(name);
       if (safeName) {
         files[safeName] = fileData;
       }
@@ -1460,7 +1513,15 @@ export async function ensureZipFormat(body: ReadableStream | ArrayBuffer | Uint8
     data = new Uint8Array(body);
   } else {
     const response = new Response(body);
-    data = new Uint8Array(await response.arrayBuffer());
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_DECOMPRESSED_SIZE) {
+      throw new Error(`Archive size ${buffer.byteLength} exceeds ${MAX_DECOMPRESSED_SIZE} byte limit`);
+    }
+    data = new Uint8Array(buffer);
+  }
+
+  if (data.length > MAX_DECOMPRESSED_SIZE) {
+    throw new Error(`Archive size ${data.length} exceeds ${MAX_DECOMPRESSED_SIZE} byte limit`);
   }
 
   if (isTarArchive(data)) {
