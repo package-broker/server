@@ -19,8 +19,6 @@ interface OrgRouteEnv {
   };
 }
 
-type OrgRole = 'owner' | 'admin' | 'member';
-
 async function getMembership(
   db: DatabasePort,
   orgId: string,

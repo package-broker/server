@@ -41,22 +41,8 @@ const addTenantPackageSchema = z.object({
   access_level: z.enum(['read', 'write']).default('read'),
 });
 
-const orgIdParam = z.object({
-  org_id: z.string().openapi({ param: { name: 'org_id', in: 'path' } }),
-});
-
-const tenantParams = z.object({
-  org_id: z.string().openapi({ param: { name: 'org_id', in: 'path' } }),
-  id: z.string().openapi({ param: { name: 'id', in: 'path' } }),
-});
-
-const tenantPackageParams = z.object({
-  org_id: z.string().openapi({ param: { name: 'org_id', in: 'path' } }),
-  id: z.string().openapi({ param: { name: 'id', in: 'path' } }),
-  package_id: z.string().openapi({ param: { name: 'package_id', in: 'path' } }),
-});
-
 // Route paths are relative to module mount at /api/organizations/:org_id/tenants
+// org_id is injected via middleware in factory.ts, not declared as a route param
 export const listTenantsRouteDef = createRoute({
   method: 'get',
   path: '/',
