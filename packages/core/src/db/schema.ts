@@ -98,8 +98,12 @@ export const packages = sqliteTable(
     repoIdIdx: index('idx_packages_repo_id').on(table.repo_id),
     nameIdx: index('idx_packages_name').on(table.name),
     manualUploadIdx: index('idx_packages_manual_upload').on(table.is_manual_upload),
-    // Unique constraint to prevent duplicate package+version entries
-    uniquePackageVersionIdx: unique('packages_name_version_unique').on(table.name, table.version),
+    // Unique constraint to prevent duplicate package+version entries per repository
+    uniqueRepoPackageVersionIdx: unique('packages_repo_name_version_unique').on(
+      table.repo_id,
+      table.name,
+      table.version
+    ),
   })
 );
 
@@ -128,4 +132,3 @@ export const users = sqliteTable(
 
 // NO activity_log table - use Cloudflare Workers logs for debugging
 // Workers logs are limited to last X entries and don't require database storage
-

@@ -70,12 +70,14 @@ CREATE TABLE IF NOT EXISTS packages (
   released_at INTEGER,
   readme_content TEXT,
   metadata TEXT,
+  is_manual_upload INTEGER DEFAULT 0 NOT NULL,
   created_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_packages_repo_id ON packages(repo_id);
 CREATE INDEX IF NOT EXISTS idx_packages_name ON packages(name);
-CREATE UNIQUE INDEX IF NOT EXISTS packages_name_version_unique ON packages(name, version);
+CREATE INDEX IF NOT EXISTS idx_packages_manual_upload ON packages(is_manual_upload);
+CREATE UNIQUE INDEX IF NOT EXISTS packages_repo_name_version_unique ON packages(repo_id, name, version);
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
