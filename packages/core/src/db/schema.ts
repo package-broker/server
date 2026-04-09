@@ -15,6 +15,7 @@ export const repositories = sqliteTable(
     error_message: text('error_message'),
     last_synced_at: integer('last_synced_at'),
     created_at: integer('created_at').notNull(),
+    org_id: text('org_id').references(() => organizations.id),
   },
   (table) => ({
     statusIdx: index('idx_repositories_status').on(table.status),
@@ -36,6 +37,8 @@ export const tokens = sqliteTable(
     created_at: integer('created_at').notNull(),
     expires_at: integer('expires_at'),
     last_used_at: integer('last_used_at'),
+    tenant_id: text('tenant_id').references(() => tenants.id),
+    org_id: text('org_id').references(() => organizations.id),
   },
   (table) => ({
     tokenHashIdx: index('idx_tokens_token_hash').on(table.token_hash),
@@ -188,19 +191,19 @@ export const organizationMembers = sqliteTable(
   'organization_members',
   {
     id: text('id').primaryKey(),
-    organization_id: text('organization_id')
+    org_id: text('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
     user_id: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    role: text('role').notNull().default('member'),
+    role: text('role').notNull().default('member'), // 'owner' | 'admin' | 'member'
     created_at: integer('created_at').notNull(),
   },
   (table) => ({
-    orgIdIdx: index('idx_org_members_org_id').on(table.organization_id),
+    orgIdIdx: index('idx_org_members_org_id').on(table.org_id),
     userIdIdx: index('idx_org_members_user_id').on(table.user_id),
-    orgUserUnique: unique('org_members_org_user_unique').on(table.organization_id, table.user_id),
+    orgUserUnique: unique('org_members_org_user_unique').on(table.org_id, table.user_id),
   })
 );
 
