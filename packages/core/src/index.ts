@@ -12,10 +12,10 @@ export * from './queue/index';
 export * from './sync';
 export * from './queue';
 export * from './jobs';
+export * from './kernel';
 export * from './utils';
 export * from './workflows';
 export * from './services/UserService';
 export * from './services/EmailService';
 export * from './ports';
 export * from './factory';
-
