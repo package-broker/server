@@ -75,7 +75,7 @@ export function createApp(options?: {
         return c.json(
             {
                 error: 'Internal Server Error',
-                message: err.message,
+                message: 'An unexpected error occurred',
                 ...(requestId && { requestId }),
             },
             500
@@ -293,6 +293,7 @@ export function createApp(options?: {
 
             return c.json(fullSpec);
         } catch (error) {
+            const reqId = c.get('requestId') as string | undefined;
             logger.error(
                 'Error generating OpenAPI spec',
                 {
@@ -304,7 +305,8 @@ export function createApp(options?: {
             return c.json(
                 {
                     error: 'Internal Server Error',
-                    message: error instanceof Error ? error.message : String(error),
+                    message: 'An unexpected error occurred',
+                    ...(reqId && { requestId: reqId }),
                 },
                 500
             );

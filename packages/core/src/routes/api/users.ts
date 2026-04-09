@@ -107,7 +107,7 @@ export async function createUser(c: OpenAPIContext<any, ReturnType<typeof create
         if (error.message === 'User already exists') {
             return c.json({ error: 'User already exists' }, 409);
         }
-        return c.json({ error: 'Failed to create user' }, 500);
+        return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
     }
 }
 

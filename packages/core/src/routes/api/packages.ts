@@ -360,7 +360,7 @@ export async function getPackageReadme(c: OpenAPIContext<PackagesRouteEnv>): Pro
       return c.json(
         {
           error: 'Internal Server Error',
-          message: error instanceof Error ? error.message : 'Failed to download artifact',
+          message: 'An unexpected error occurred',
         },
         500
       );
@@ -643,7 +643,7 @@ export async function getPackageChangelog(c: OpenAPIContext<PackagesRouteEnv>): 
       return c.json(
         {
           error: 'Internal Server Error',
-          message: error instanceof Error ? error.message : 'Failed to download artifact',
+          message: 'An unexpected error occurred',
         },
         500
       );
