@@ -15,7 +15,7 @@ async function loadTokenScopes(db: DatabasePort, tokenId: string): Promise<Token
     .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
     .from(tokenScopes)
     .where(eq(tokenScopes.token_id, tokenId));
-  const validScopes = scopeRows.filter((row) => VALID_SCOPE_TYPES.has(row.scope_type));
+  const validScopes = scopeRows.filter((row: { scope_type: string; scope_value: string }) => VALID_SCOPE_TYPES.has(row.scope_type));
   return new TokenScopeService(
     validScopes as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
   );
