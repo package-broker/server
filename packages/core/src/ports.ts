@@ -2,6 +2,7 @@
 // adhering to Hexagonal Architecture (Ports & Adapters)
 
 import type { Database } from './db/index';
+import type { Job } from './jobs/processor';
 
 /**
  * Database Port
@@ -11,27 +12,15 @@ import type { Database } from './db/index';
 export type DatabasePort = Database;
 
 /**
- * Database Driver Interface
- * Abstract interface for database drivers (SQLite, PostgreSQL, etc.)
+ * Database Adapter Interface
+ * Abstract interface for database adapters (SQLite, PostgreSQL, etc.)
  * Follows Port-Adapter pattern for database-agnostic operations
  */
-export interface DatabaseDriver {
-    /**
-     * Check if the database has been initialized (migrations applied)
-     * Uses Drizzle's __drizzle_migrations table for database-agnostic check
-     */
-    isInitialized(): Promise<boolean>;
-    
-    /**
-     * Run database migrations from the specified migrations folder
-     * @param migrationsPath Path to directory containing migration files
-     */
-    runMigrations(migrationsPath: string): Promise<void>;
-    
-    /**
-     * Get the database connection/ORM instance
-     */
-    getConnection(): DatabasePort;
+export interface DatabaseAdapter {
+    connect(): Promise<DatabasePort>;
+    migrate(migrationsPath: string): Promise<void>;
+    close(): Promise<void>;
+    isHealthy(): Promise<boolean>;
 }
 
 /**
@@ -40,7 +29,7 @@ export interface DatabaseDriver {
  */
 export interface CachePort {
     get(key: string): Promise<string | null>;
-    get<T>(key: string, type: 'json'): Promise<T | null>;
+    getJson<T>(key: string): Promise<T | null>;
     put(
         key: string,
         value: string | ReadableStream | ArrayBuffer | ArrayBufferView,
@@ -54,10 +43,38 @@ export interface CachePort {
  * Abstract interface for job queues (Cloudflare Queues, BullMQ, SQS)
  */
 export interface QueuePort {
-    send(message: any): Promise<void>;
-    sendBatch(messages: any[]): Promise<void>;
+    send(message: Job): Promise<void>;
+    sendBatch(messages: Job[]): Promise<void>;
 }
 
+export interface SessionStorePort {
+    getSession<T>(token: string): Promise<T | null>;
+    setSession<T>(token: string, data: T, ttlSeconds: number): Promise<void>;
+    deleteSession(token: string): Promise<void>;
+}
+
+export interface RateLimiterPort {
+    checkAndIncrement(key: string, maxPerHour: number): Promise<{ allowed: boolean; remaining: number }>;
+}
+
+export interface VcsProviderPort {
+    name: string;
+    discoverPackages(org: string, token: string, filter?: string): Promise<DiscoveredPackage[]>;
+    fetchPackageMetadata(repoUrl: string, token: string): Promise<PackageMetadata | null>;
+    verifyCredentials(url: string, credentialType: string, credentials: string): Promise<boolean>;
+}
+
+export interface DiscoveredPackage {
+    name: string;
+    versions: string[];
+    source: string;
+}
+
+export interface PackageMetadata {
+    name: string;
+    description?: string;
+    versions: Record<string, unknown>;
+}
 
 export interface AnalyticsPort {
     track(event: string, properties?: Record<string, any>): void;

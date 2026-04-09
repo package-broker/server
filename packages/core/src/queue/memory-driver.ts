@@ -1,5 +1,6 @@
 
 import type { QueuePort } from '../ports';
+import type { Job } from '../jobs/processor';
 
 /**
  * In-memory queue driver
@@ -8,9 +9,9 @@ import type { QueuePort } from '../ports';
  * but since the Port only defines `send`, we effectively just "ack" it.
  */
 export class MemoryQueueDriver implements QueuePort {
-    private messages: any[] = [];
+    private messages: Array<{ message: Job; timestamp: number }> = [];
 
-    async send(message: any): Promise<void> {
+    async send(message: Job): Promise<void> {
         // In a real local setup, you might want to process this immediately 
         // or have a background loop. For now, we store it.
         this.messages.push({ message, timestamp: Date.now() });
@@ -18,7 +19,7 @@ export class MemoryQueueDriver implements QueuePort {
         console.log('[MemoryQueue] Message received:', message);
     }
 
-    async sendBatch(messages: any[]): Promise<void> {
+    async sendBatch(messages: Job[]): Promise<void> {
         for (const msg of messages) {
             await this.send(msg);
         }
