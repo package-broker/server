@@ -1,7 +1,7 @@
 // Packages API routes
 
 import type { Context } from 'hono';
-import type { OpenAPIContext } from '../../routes/api/types';
+import type { OpenAPIContext } from '../../types/openapi';
 import type { DatabasePort, CachePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
 import { eq, like, and, countDistinct, inArray } from 'drizzle-orm';

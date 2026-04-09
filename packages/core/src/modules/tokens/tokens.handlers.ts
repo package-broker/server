@@ -4,7 +4,7 @@
  * Licensed under AGPL-3.0
  */
 
-import type { OpenAPIContext } from '../../routes/api/types';
+import type { OpenAPIContext } from '../../types/openapi';
 import { createTokenSchema, updateTokenSchema } from '@package-broker/shared';
 import type { DatabasePort } from '../../ports';
 import { tokens } from '../../db/schema';

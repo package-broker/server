@@ -5,7 +5,7 @@
  */
 
 import type { Context } from 'hono';
-import type { OpenAPIContext } from '../../routes/api/types';
+import type { OpenAPIContext } from '../../types/openapi';
 import type { DatabasePort } from '../../ports';
 import { repositories } from '../../db/schema';
 import { eq } from 'drizzle-orm';

@@ -7,7 +7,7 @@
 import type { Context } from 'hono';
 import type { AppVariables } from '../../factory';
 import { users } from '../../db/schema';
-import type { OpenAPIContext } from '../../routes/api/types';
+import type { OpenAPIContext } from '../../types/openapi';
 import { getLogger } from '../../utils/logger';
 import { isSshSupported } from '../../utils/environment';
 

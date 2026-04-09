@@ -4,7 +4,7 @@
  * Licensed under AGPL-3.0
  */
 
-import type { OpenAPIContext } from '../../routes/api/types';
+import type { OpenAPIContext } from '../../types/openapi';
 import { UserService } from '../../services/UserService';
 import { createUserRequestSchema } from '@package-broker/shared';
 
