@@ -10,7 +10,7 @@ export interface DiscoveredPackage {
 
 export interface DiscoveryResult {
   packages: DiscoveredPackage[];
-  dryRun: boolean;
+  dry_run: boolean;
   errors: string[];
 }
 
@@ -63,7 +63,7 @@ export class GitHubOrgImporter {
 
     return {
       packages,
-      dryRun: options?.dryRun ?? false,
+      dry_run: options?.dryRun ?? false,
       errors,
     };
   }

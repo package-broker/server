@@ -37,7 +37,7 @@ describe('GitHubOrgImporter', () => {
     const importer = new GitHubOrgImporter('test-org', 'ghp_test', mockFetch as typeof fetch);
     const result = await importer.discover({ dryRun: true });
 
-    expect(result.dryRun).toBe(true);
+    expect(result.dry_run).toBe(true);
     expect(result.packages).toHaveLength(1);
   });
 

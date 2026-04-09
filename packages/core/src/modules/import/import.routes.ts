@@ -18,7 +18,7 @@ const discoveredPackageSchema = z.object({
 
 const importGithubOrgResponseSchema = z.object({
   packages: z.array(discoveredPackageSchema),
-  dryRun: z.boolean(),
+  dry_run: z.boolean(),
   errors: z.array(z.string()),
 });
 
