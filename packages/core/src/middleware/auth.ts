@@ -8,13 +8,16 @@ import { tokens, tokenScopes } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { TokenScopeService } from '../services/TokenScopeService';
 
+const VALID_SCOPE_TYPES = new Set(['repository', 'package_pattern']);
+
 async function loadTokenScopes(db: DatabasePort, tokenId: string): Promise<TokenScopeService> {
   const scopeRows = await db
     .select({ scope_type: tokenScopes.scope_type, scope_value: tokenScopes.scope_value })
     .from(tokenScopes)
     .where(eq(tokenScopes.token_id, tokenId));
+  const validScopes = scopeRows.filter((row) => VALID_SCOPE_TYPES.has(row.scope_type));
   return new TokenScopeService(
-    scopeRows as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
+    validScopes as { scope_type: 'repository' | 'package_pattern'; scope_value: string }[]
   );
 }
 

@@ -20,6 +20,13 @@ describe('matchesPackageFilter', () => {
     expect(matchesPackageFilter('unknown/pkg', 'vendor/*, other/pkg')).toBe(false);
   });
 
+  it('should not match bare * or vendor* without slash', () => {
+    // 'vendor*' should NOT match — only 'vendor/*' is valid glob
+    expect(matchesPackageFilter('vendor/pkg', 'vendor*')).toBe(false);
+    // bare '*' should not match anything (not a valid glob)
+    expect(matchesPackageFilter('anything/pkg', '*')).toBe(false);
+  });
+
   it('should be case-insensitive', () => {
     expect(matchesPackageFilter('Vendor/Pkg', 'vendor/*')).toBe(true);
     expect(matchesPackageFilter('vendor/pkg', 'Vendor/*')).toBe(true);
