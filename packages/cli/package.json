@@ -4,7 +4,8 @@
   "description": "CLI tool to initialize PACKAGE.broker configuration",
   "type": "module",
   "bin": {
-    "package-broker": "./dist/index.js"
+    "package-broker": "./dist/index.js",
+    "package-broker-migrate": "./dist/migrate.js"
   },
   "files": [
     "dist",
