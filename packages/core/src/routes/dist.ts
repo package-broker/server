@@ -16,8 +16,8 @@ import { downloadFromSource } from '../utils/download';
 import { decryptCredentials } from '../utils/encryption';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { nanoid } from 'nanoid';
-import { unzipSync, strFromU8 } from 'fflate';
 import { getLogger } from '../utils/logger';
+import { extractReadme, extractChangelog } from '../utils/zip-utils';
 import { getAnalytics } from '../utils/analytics';
 import { type AuthContext } from '../middleware/auth';
 import { lazyLoadPackageFromRepositories, normalizePackageVersions, storePackageInDB, deriveVersionNormalized } from './composer';
@@ -93,82 +93,6 @@ function getFileExtensionForDistType(distType: string | null | undefined): strin
   
   // Default fallback
   return 'zip';
-}
-
-/**
- * Extract README.md or README.mdown from ZIP archive
- */
-function extractReadme(zipData: Uint8Array): string | null {
-  try {
-    const files = unzipSync(zipData);
-
-    // Look for README in common locations (case-insensitive)
-    // Prefer .md over .mdown if both exist
-    const readmeNames = [
-      'README.md', 'readme.md', 'README.MD', 'Readme.md',
-      'README.mdown', 'readme.mdown', 'README.MDOWN', 'Readme.mdown'
-    ];
-
-    // First pass: look for .md files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (readmeNames.slice(0, 4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    // Second pass: look for .mdown files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (readmeNames.slice(4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    const logger = getLogger();
-    logger.error('Error extracting README from ZIP', {}, error instanceof Error ? error : new Error(String(error)));
-    return null;
-  }
-}
-
-/**
- * Extract CHANGELOG.md or CHANGELOG.mdown from ZIP archive
- */
-function extractChangelog(zipData: Uint8Array): string | null {
-  try {
-    const files = unzipSync(zipData);
-
-    // Look for CHANGELOG in common locations (case-insensitive)
-    // Prefer .md over .mdown if both exist
-    const changelogNames = [
-      'CHANGELOG.md', 'changelog.md', 'CHANGELOG.MD', 'Changelog.md',
-      'CHANGELOG.mdown', 'changelog.mdown', 'CHANGELOG.MDOWN', 'Changelog.mdown'
-    ];
-
-    // First pass: look for .md files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (changelogNames.slice(0, 4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    // Second pass: look for .mdown files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (changelogNames.slice(4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    const logger = getLogger();
-    logger.error('Error extracting CHANGELOG from ZIP', {}, error instanceof Error ? error : new Error(String(error)));
-    return null;
-  }
 }
 
 /**

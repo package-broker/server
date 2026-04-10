@@ -5,7 +5,6 @@ import type { OpenAPIContext } from '../../types/openapi';
 import type { DatabasePort, CachePort } from '../../ports';
 import { packages, artifacts, repositories } from '../../db/schema';
 import { eq, like, and, countDistinct, inArray } from 'drizzle-orm';
-import { unzipSync, strFromU8 } from 'fflate';
 import type { StorageDriver } from '../../storage/driver';
 import { buildStorageKey, buildReadmeStorageKey, buildChangelogStorageKey } from '../../storage/driver';
 import { downloadFromSource } from '../../utils/download';
@@ -14,6 +13,7 @@ import { nanoid } from 'nanoid';
 import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { isPackagistMirroringEnabled } from '../admin';
 import { getLogger } from '../../utils/logger';
+import { extractReadme, extractChangelog } from '../../utils/zip-utils';
 import { fetchPackageFromUpstream, type UpstreamRepository } from '../../utils/upstream-fetch.js';
 
 export interface PackagesRouteEnv {
@@ -124,80 +124,6 @@ export async function getPackage(c: OpenAPIContext<PackagesRouteEnv>): Promise<R
     name,
     versions: packageVersions,
   });
-}
-
-/**
- * Extract README.md or README.mdown from ZIP archive
- */
-function extractReadme(zipData: Uint8Array): string | null {
-  try {
-    const files = unzipSync(zipData);
-
-    // Look for README in common locations (case-insensitive)
-    // Prefer .md over .mdown if both exist
-    const readmeNames = [
-      'README.md', 'readme.md', 'README.MD', 'Readme.md',
-      'README.mdown', 'readme.mdown', 'README.MDOWN', 'Readme.mdown'
-    ];
-
-    // First pass: look for .md files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (readmeNames.slice(0, 4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    // Second pass: look for .mdown files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (readmeNames.slice(4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error extracting README from ZIP:', error);
-    return null;
-  }
-}
-
-/**
- * Extract CHANGELOG.md or CHANGELOG.mdown from ZIP archive
- */
-function extractChangelog(zipData: Uint8Array): string | null {
-  try {
-    const files = unzipSync(zipData);
-
-    // Look for CHANGELOG in common locations (case-insensitive)
-    // Prefer .md over .mdown if both exist
-    const changelogNames = [
-      'CHANGELOG.md', 'changelog.md', 'CHANGELOG.MD', 'Changelog.md',
-      'CHANGELOG.mdown', 'changelog.mdown', 'CHANGELOG.MDOWN', 'Changelog.mdown'
-    ];
-
-    // First pass: look for .md files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (changelogNames.slice(0, 4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    // Second pass: look for .mdown files
-    for (const [path, content] of Object.entries(files)) {
-      const filename = path.split('/').pop() || '';
-      if (changelogNames.slice(4).includes(filename)) {
-        return strFromU8(content);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error extracting CHANGELOG from ZIP:', error);
-    return null;
-  }
 }
 
 /**
