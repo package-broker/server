@@ -5,6 +5,7 @@
  */
 
 import { unzipSync, strFromU8 } from 'fflate';
+import { extractReadme as extractReadmeFromZip } from './zip-utils';
 
 /**
  * Composer package metadata structure
@@ -260,47 +261,8 @@ export async function validatePackageArchive(
 }
 
 /**
- * Extract README.md from package archive (reused from existing code)
- * Performance: Only extracts README if found in first 50 files
+ * Extract README.md from package archive.
+ * Delegates to shared zip-utils implementation.
  */
-export function extractReadme(zipData: Uint8Array): string | null {
-  try {
-    const files = unzipSync(zipData);
-    
-    const readmeNames = [
-      'README.md', 'readme.md', 'README.MD', 'Readme.md',
-      'README.mdown', 'readme.mdown', 'README.MDOWN', 'Readme.mdown',
-      'README', 'readme', 'README.txt', 'readme.txt',
-    ];
-
-    let filesChecked = 0;
-    const MAX_FILES_TO_CHECK = 50;
-
-    // Look for README in root or first-level directory
-    for (const [path, content] of Object.entries(files)) {
-      filesChecked++;
-      if (filesChecked > MAX_FILES_TO_CHECK) {
-        break;
-      }
-
-      const filename = path.split('/').pop() || '';
-      const filenameLower = filename.toLowerCase();
-
-      // Prefer .md files
-      if (readmeNames.slice(0, 8).some(name => filenameLower === name.toLowerCase())) {
-        // Limit README size to 500KB
-        if (content.length > 500 * 1024) {
-          console.warn(`README too large: ${path} (${content.length} bytes)`);
-          continue;
-        }
-        return strFromU8(content);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error extracting README from ZIP:', error);
-    return null;
-  }
-}
+export const extractReadme = extractReadmeFromZip;
 
