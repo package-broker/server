@@ -15,6 +15,7 @@ import { isGitHubUrl, isSshGitUrl } from '../../utils/upstream-fetch';
 import { isSshSupported } from '../../utils/environment';
 import { nanoid } from 'nanoid';
 import { getAnalytics } from '../../utils/analytics';
+import { getVcsProviderRegistry } from '../../vcs/registry';
 
 export interface RepositoriesRouteEnv {
   Bindings: {
@@ -343,9 +344,9 @@ async function validateRepositoryCredentials(
   encryptionKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Handle GitHub repositories differently
+    // Handle git repositories via VCS provider registry (supports GitHub, GitLab, Bitbucket)
     if (repo.vcs_type === 'git') {
-      return validateGitHubRepository(repo, encryptionKey);
+      return validateGitRepository(repo, encryptionKey);
     }
 
     // Composer repository validation (existing logic)
@@ -387,6 +388,57 @@ async function validateRepositoryCredentials(
       error: error instanceof Error ? error.message : 'Unknown error during validation',
     };
   }
+}
+
+/**
+ * Validate a git repository using VCS provider registry.
+ * Supports GitHub, GitLab, and Bitbucket URLs.
+ */
+async function validateGitRepository(
+  repo: typeof repositories.$inferSelect,
+  encryptionKey: string
+): Promise<{ success: boolean; error?: string }> {
+  // SSH key authentication is handled separately
+  if (repo.credential_type === 'ssh_key') {
+    if (!isSshSupported()) {
+      return {
+        success: false,
+        error: 'SSH key authentication is not supported in this environment. SSH keys are only available in Node.js/Docker environments.',
+      };
+    }
+    if (!repo.url || !isSshGitUrl(repo.url)) {
+      return { success: false, error: 'Invalid repository URL for SSH authentication.' };
+    }
+    return { success: true };
+  }
+
+  // Check if any VCS provider recognizes this URL
+  const registry = getVcsProviderRegistry();
+  const provider = registry.resolve(repo.url);
+
+  if (provider) {
+    // Decrypt credentials and verify with the provider
+    try {
+      const credentialsJson = await decryptCredentials(repo.auth_credentials, encryptionKey);
+      const valid = await provider.verifyCredentials(
+        repo.url,
+        repo.credential_type,
+        credentialsJson,
+      );
+      if (!valid) {
+        return { success: false, error: 'Authentication failed. Please check your credentials.' };
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during validation',
+      };
+    }
+  }
+
+  // Fallback to GitHub-specific validation for backward compatibility
+  return validateGitHubRepository(repo, encryptionKey);
 }
 
 /**

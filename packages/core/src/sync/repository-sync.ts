@@ -11,7 +11,6 @@ import { createDatabase } from '../db/create-database';
 import { repositories, packages as packagesTable } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { decryptCredentials } from '../utils/encryption';
-import { syncGitHubRepository } from './github-sync';
 import { syncComposerRepository } from './strategies/composer-repo';
 import type { SyncResult, ComposerPackage } from './types';
 import type { CredentialType } from '@package-broker/shared';
@@ -20,6 +19,7 @@ import { nanoid } from 'nanoid';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
 import { isSshSupported } from '../utils/environment';
+import { getVcsProviderRegistry } from '../vcs/registry';
 
 export interface SyncEnv {
   DB: D1Database;
@@ -215,27 +215,15 @@ async function syncGitRepository(
     );
   }
 
-  // Parse URL to extract owner/repo for GitHub API sync
-  const urlMatch = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+  // Resolve VCS provider from registry (supports GitHub, GitLab, Bitbucket)
+  const registry = getVcsProviderRegistry();
+  const provider = registry.resolve(url);
 
-  if (urlMatch) {
-    const [, owner, repo] = urlMatch;
-    
-    // For 'none' credential type, pass null token (public repo access)
-    const token = credentialType === 'none' 
-      ? null 
-      : (credentials.token || credentials.password || '');
-    
-    return syncGitHubRepository({
-      owner,
-      repo: repo.replace('.git', ''),
-      token,
-      composerJsonPath,
-    });
+  if (provider) {
+    return provider.syncRepository(url, credentials, credentialType, composerJsonPath);
   }
 
-  // GitLab/Bitbucket would be handled similarly
-  // For now, return error for unsupported Git hosts
+  // No registered provider matched the URL
   return {
     success: false,
     packages: [],

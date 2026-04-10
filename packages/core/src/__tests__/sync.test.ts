@@ -4,6 +4,7 @@ import { createDatabase } from '../db/create-database';
 import { decryptCredentials } from '../utils/encryption';
 import { syncGitHubRepository } from '../sync/github-sync';
 import { syncComposerRepository } from '../sync/strategies/composer-repo';
+import { registerBuiltinVcsProviders } from '../vcs';
 
 vi.mock('../db/create-database');
 vi.mock('../utils/encryption');
@@ -19,6 +20,9 @@ vi.mock('../utils/analytics', () => ({
         trackRepositorySyncFailure: vi.fn(),
     }),
 }));
+
+// Register VCS providers so the registry can resolve GitHub URLs
+registerBuiltinVcsProviders();
 
 describe('Repository Sync', () => {
     const mockEnv = {
@@ -57,7 +61,7 @@ describe('Repository Sync', () => {
                 vcs_type: 'git',
                 url: 'https://github.com/owner/repo',
                 auth_credentials: 'encrypted',
-                credential_type: 'token',
+                credential_type: 'github_token',
             }])
             .mockResolvedValue([]); // For storePackages check
 
@@ -121,6 +125,7 @@ describe('Repository Sync', () => {
             vcs_type: 'git',
             url: 'https://github.com/owner/fail',
             auth_credentials: 'encrypted',
+            credential_type: 'github_token',
         }]);
 
         (decryptCredentials as any).mockResolvedValue('{}');

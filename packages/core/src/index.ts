@@ -16,4 +16,5 @@ export * from './workflows';
 export * from './services/UserService';
 export * from './services/EmailService';
 export * from './ports';
+export * from './vcs';
 export * from './factory';
