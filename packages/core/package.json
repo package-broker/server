@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/core",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,7 +29,7 @@
   "dependencies": {
     "@hono/zod-openapi": "^1.2.0",
     "@noble/hashes": "^2.0.1",
-    "@package-broker/shared": "^0.18.0",
+    "@package-broker/shared": "^0.19.0",
     "@types/nodemailer": "^7.0.4",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.1",
