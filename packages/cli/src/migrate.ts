@@ -446,7 +446,15 @@ export {
   type ComposerJson,
 };
 
-main().catch((err) => {
-  error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+// Only run main() when executed directly (not when imported by tests)
+const isDirectExecution =
+  typeof process !== 'undefined' &&
+  process.argv[1] &&
+  (process.argv[1].endsWith('migrate.js') || process.argv[1].endsWith('migrate.ts'));
+
+if (isDirectExecution) {
+  main().catch((err) => {
+    error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

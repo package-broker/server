@@ -7,18 +7,8 @@ import {
   type ComposerJson,
 } from '../migrate';
 
-// Prevent main() from running on import
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  existsSync: vi.fn(() => false),
-}));
-
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
-
-// Mock process.argv and process.exit
-vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 describe('rewriteComposerJson', () => {
   it('should replace matching repository URL', () => {
