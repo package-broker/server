@@ -23,6 +23,7 @@ import organizationsModule from './modules/organizations';
 import tenantsModule from './modules/tenants';
 import { getPackageStatsRouteDef } from './modules/admin/admin.routes';
 import { getPackageStats } from './modules/admin/admin.handlers';
+import { registerBuiltinVcsProviders } from './vcs';
 
 // Generic Environment Interface
 export interface AppBindings {
@@ -59,6 +60,9 @@ export function createApp(options?: {
 }): AppInstance {
     const app = new OpenAPIHono<{ Bindings: AppBindings; Variables: AppVariables }>();
     const logger = getLogger('info'); // Default logger, can vary per request if needed
+
+    // Register built-in VCS providers (GitHub, GitLab, Bitbucket)
+    registerBuiltinVcsProviders();
 
     // Global middleware
     app.use('*', cors());
