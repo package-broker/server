@@ -24,6 +24,7 @@ import tenantsModule from './modules/tenants';
 import { getPackageStatsRouteDef } from './modules/admin/admin.routes';
 import { getPackageStats } from './modules/admin/admin.handlers';
 import { registerBuiltinVcsProviders } from './vcs';
+import securityModule from './plugins/security-advisories/advisory.module';
 
 // Generic Environment Interface
 export interface AppBindings {
@@ -206,6 +207,7 @@ export function createApp(options?: {
     protectedRoutes.route('/packages', packagesModule);
     protectedRoutes.route('/artifacts', artifactsModule);
     protectedRoutes.route('/import', importModule);
+    protectedRoutes.route('/security', securityModule);
     protectedRoutes.route('/organizations', organizationsModule);
 
     // Mount tenants under organizations with org_id middleware
