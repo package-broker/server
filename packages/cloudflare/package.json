@@ -23,7 +23,7 @@
     "@package-broker/main": "^0.19.0",
     "execa": "^9.6.1",
     "prompts": "^2.4.2",
-    "wrangler": "^4.66.0"
+    "wrangler": "^4.95.0"
   },
   "devDependencies": {
     "@types/iarna__toml": "^2.0.5",
