@@ -12,6 +12,8 @@ import {
   initAnalytics,
   PackageStorageWorkflow,
   createApp,
+  processQueueMessage,
+  type QueueMessage,
 } from '@package-broker/core';
 import { R2Driver } from './adapters/r2-storage.js';
 import { createD1Database } from './adapters/d1-database.js';
@@ -165,5 +167,31 @@ export default {
 
     const app = createWorker({ storage: 'r2' }, env);
     return app.fetch(request, env, ctx);
+  },
+
+  /**
+   * Queue consumer for async database updates (token usage, artifact
+   * download counters, repository sync status). Without this handler,
+   * queued messages are never consumed and silently expire.
+   */
+  async queue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
+    const logLevel = (env?.LOG_LEVEL || 'info') as 'debug' | 'info' | 'warn' | 'error';
+    const logger = getLogger(logLevel);
+
+    await Promise.all(
+      batch.messages.map(async (msg) => {
+        try {
+          await processQueueMessage(msg.body, { DB: env.DB });
+          msg.ack();
+        } catch (error) {
+          logger.error(
+            'Error processing queue message',
+            { messageType: msg.body?.type },
+            error instanceof Error ? error : new Error(String(error))
+          );
+          msg.retry();
+        }
+      })
+    );
   },
 };

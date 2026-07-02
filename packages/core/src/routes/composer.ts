@@ -19,6 +19,7 @@ import { encryptCredentials } from '../utils/encryption';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
 import { runInBackground } from '../utils/background';
+import { revalidateStalePackage, REVALIDATION_TTL_SECONDS } from './package-revalidation';
 
 export interface ComposerRouteEnv {
   Bindings: {
@@ -172,9 +173,12 @@ export async function packagesJsonRoute(c: Context<ComposerRouteEnv>): Promise<R
   // No cache - build packages.json from database
   const packagesJson = await buildPackagesJson(c);
 
-  // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
+  // Cache the result (fire-and-forget to avoid blocking on KV rate limits).
+  // Never cache while repository syncs are pending or in flight: the list is
+  // built from pre-sync data and would otherwise be pinned in KV until the
+  // next manual purge.
   const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
-  if (cachingEnabled && c.env.KV) {
+  if (cachingEnabled && c.env.KV && !hasPendingRepos) {
     runInBackground(c,
       Promise.all([
         c.env.KV.put(kvKey, JSON.stringify(packagesJson)).catch(() => { }),
@@ -233,6 +237,45 @@ function matchesPackageFilter(packageName: string, filter: string | null): boole
 }
 
 /**
+ * Fetch package metadata from a single repository, dispatching on vcs_type.
+ * Returns the raw upstream package data, or null when the repo does not
+ * provide the package (filter mismatch, unsupported host, not found).
+ */
+export async function fetchPackageFromRepository(
+  repo: typeof repositories.$inferSelect,
+  packageName: string,
+  encryptionKey: string
+): Promise<any | null> {
+  if (!matchesPackageFilter(packageName, repo.package_filter)) {
+    return null;
+  }
+
+  const repoRef = {
+    id: repo.id,
+    url: repo.url,
+    vcs_type: repo.vcs_type,
+    credential_type: repo.credential_type,
+    auth_credentials: repo.auth_credentials,
+    package_filter: repo.package_filter,
+  };
+
+  if (repo.vcs_type === 'composer') {
+    const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
+    return fetchPackageFromUpstream(repoRef, packageName, encryptionKey);
+  }
+
+  if (repo.vcs_type === 'git') {
+    const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
+    if (!isGitHubUrl(repo.url)) {
+      return null;
+    }
+    return fetchPackageFromGitHub(repoRef, packageName, encryptionKey);
+  }
+
+  return null;
+}
+
+/**
  * Lazy load package metadata from all available repositories
  * Returns package data and repo_id if found, null otherwise
  */
@@ -251,56 +294,18 @@ export async function lazyLoadPackageFromRepositories(
 
   for (const repo of sortedRepos) {
     try {
-      if (!matchesPackageFilter(packageName, repo.package_filter)) {
-        continue;
-      }
-
-      let packageData = null;
-      
-      if (repo.vcs_type === 'composer') {
-        const { fetchPackageFromUpstream } = await import('../utils/upstream-fetch');
-        packageData = await fetchPackageFromUpstream(
-          {
-            id: repo.id,
-            url: repo.url,
-            vcs_type: repo.vcs_type,
-            credential_type: repo.credential_type,
-            auth_credentials: repo.auth_credentials,
-            package_filter: repo.package_filter,
-          },
-          packageName,
-          encryptionKey
-        );
-      } else if (repo.vcs_type === 'git') {
-        const { fetchPackageFromGitHub, isGitHubUrl } = await import('../utils/upstream-fetch');
-        
-        if (!isGitHubUrl(repo.url)) {
-          continue;
-        }
-        packageData = await fetchPackageFromGitHub(
-          {
-            id: repo.id,
-            url: repo.url,
-            vcs_type: repo.vcs_type,
-            credential_type: repo.credential_type,
-            auth_credentials: repo.auth_credentials,
-            package_filter: repo.package_filter,
-          },
-          packageName,
-          encryptionKey
-        );
-      }
+      const packageData = await fetchPackageFromRepository(repo, packageName, encryptionKey);
 
       if (packageData) {
         return { packageData, repoId: repo.id };
       }
     } catch (error) {
       const logger = getLogger();
-      logger.warn('Error fetching package from repo', { 
-        packageName, 
-        repoId: repo.id, 
+      logger.warn('Error fetching package from repo', {
+        packageName,
+        repoId: repo.id,
         vcsType: repo.vcs_type,
-        error: error instanceof Error ? error.message : String(error) 
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
@@ -342,7 +347,8 @@ export async function lazyLoadPackageFromRepositories(
 export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Response> {
   const vendor = c.req.param('vendor');
   const packageFile = c.req.param('package');
-  const packageName = `${vendor}/${packageFile?.replace('.json', '')}`;
+  // Strip only the trailing extension - package names may contain ".json"
+  const packageName = `${vendor}/${packageFile?.replace(/\.json$/, '')}`;
 
   if (!vendor || !packageFile) {
     return c.json({ error: 'Bad Request', message: 'Invalid package name' }, 400);
@@ -351,6 +357,8 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   const kvKey = `p2:${packageName}`;
   const metadataKey = `p2:${packageName}:metadata`;
   const db = c.get('database');
+  const requestUrl = new URL(c.req.url);
+  const requestBaseUrl = `${requestUrl.protocol}//${requestUrl.host}`;
 
   // Check conditional request
   const ifModifiedSince = c.req.header('If-Modified-Since');
@@ -433,19 +441,42 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   if (existingPackages.length > 0) {
     // Build response from database packages
     const maxVersions = getMaxVersions(c.env);
-    const url = new URL(c.req.url);
-    const baseUrl = `${url.protocol}//${url.host}`;
-    const packageData = buildP2Response(packageName, existingPackages, maxVersions, baseUrl);
+    const packageData = buildP2Response(packageName, existingPackages, maxVersions, requestBaseUrl);
 
     // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
+    // TTL keeps cached responses from outliving the revalidation window
     const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
     if (cachingEnabled && c.env.KV) {
-      runInBackground(c,
-        Promise.all([
-          c.env.KV.put(kvKey, JSON.stringify(packageData)).catch(() => { }),
-          c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() })).catch(() => { })
-        ])
-      );
+      const kv = c.env.KV;
+      // Stale-while-revalidate: this branch is only reached when the cached
+      // response has expired (at most once per TTL), so it doubles as the
+      // trigger to re-check upstream for new releases. The cache write MUST
+      // complete before revalidation runs - otherwise revalidation's cache
+      // purge could be overwritten by this stale response.
+      // Pinned to the repos the rows came from - see package-revalidation.ts.
+      const repoIds = [...new Set<string>(existingPackages.map((pkg: typeof packages.$inferSelect) => pkg.repo_id))];
+      runInBackground(c, (async () => {
+        await Promise.all([
+          kv.put(kvKey, JSON.stringify(packageData), { expirationTtl: REVALIDATION_TTL_SECONDS }).catch(() => { }),
+          kv.put(metadataKey, JSON.stringify({ lastModified: Date.now() }), { expirationTtl: REVALIDATION_TTL_SECONDS }).catch(() => { })
+        ]);
+        await revalidateStalePackage({
+          db,
+          cache: kv,
+          packageName,
+          repoIds,
+          encryptionKey: c.env.ENCRYPTION_KEY,
+          proxyBaseUrl: requestBaseUrl,
+          loadPackageFromRepo: fetchPackageFromRepository,
+          storePackages: transformPackageDistUrls,
+        });
+      })().catch((error) => {
+        const logger = getLogger();
+        logger.warn('Background package revalidation failed', {
+          packageName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }));
     }
 
     // Track metadata request (cache miss, from DB)
@@ -468,8 +499,6 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   }
 
   // Not in database - try lazy loading from upstream repositories
-  const url = new URL(c.req.url);
-  const baseUrl = `${url.protocol}//${url.host}`;
   const maxVersions = getMaxVersions(c.env);
 
   const lazyLoadResult = await lazyLoadPackageFromRepositories(
@@ -481,10 +510,10 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
 
   if (lazyLoadResult) {
     const { packageData, repoId } = lazyLoadResult;
-    const transformedData = transformDistUrlsInMemory(packageData, repoId, baseUrl, maxVersions);
+    const transformedData = transformDistUrlsInMemory(packageData, repoId, requestBaseUrl, maxVersions);
 
     // Store package versions in background
-    schedulePackageStorage(c, packageName, packageData, repoId, baseUrl);
+    schedulePackageStorage(c, packageName, packageData, repoId, requestBaseUrl);
 
     // Track metadata request (cache miss, from upstream)
     const analytics = getAnalytics();
@@ -983,23 +1012,51 @@ export async function ensurePackagistRepository(
 }
 
 
+/** A repo stuck in 'syncing' longer than this is treated as dead (killed worker) */
+const STALE_SYNC_THRESHOLD_SECONDS = 900;
+
 /**
- * Sync all pending repositories
- * Uses job processor which automatically chooses sync vs async execution
- * @returns true if any repositories were synced
+ * Sync all pending repositories in the background.
+ * Uses job processor which automatically chooses sync vs async execution.
+ * @returns true while any repository sync is pending or still running -
+ *          callers must not cache packages.json built in that window
  */
 async function syncPendingRepositories(c: Context<ComposerRouteEnv>): Promise<boolean> {
   const db = c.get('database');
 
-  // Get repositories that need sync (pending status)
-  const reposToSync = await db
+  const unsettledRepos = await db
     .select()
     .from(repositories)
-    .where(eq(repositories.status, 'pending'));
+    .where(inArray(repositories.status, ['pending', 'syncing']));
+
+  const now = Math.floor(Date.now() / 1000);
+  const isStaleSync = (repo: any) =>
+    repo.status === 'syncing' && (repo.last_synced_at || 0) <= now - STALE_SYNC_THRESHOLD_SECONDS;
+
+  // Re-sync repos stuck in 'syncing' (worker killed mid-sync) along with
+  // pending ones - otherwise they would stay unsynced forever
+  const reposToSync = unsettledRepos.filter(
+    (repo: any) => repo.status === 'pending' || isStaleSync(repo)
+  );
+  const syncsInFlight = unsettledRepos.filter(
+    (repo: any) => repo.status === 'syncing' && !isStaleSync(repo)
+  );
 
   if (reposToSync.length === 0) {
-    return false;
+    return syncsInFlight.length > 0;
   }
+
+  // Claim the repos before backgrounding the sync so concurrent
+  // packages.json requests do not start duplicate syncs of the same repo
+  await db
+    .update(repositories)
+    .set({ status: 'syncing', last_synced_at: now })
+    .where(
+      and(
+        inArray(repositories.id, reposToSync.map((repo: any) => repo.id)),
+        inArray(repositories.status, ['pending', 'syncing'])
+      )
+    );
 
   // Determine proxy base URL from request
   const url = new URL(c.req.url);
@@ -1027,8 +1084,12 @@ async function syncPendingRepositories(c: Context<ComposerRouteEnv>): Promise<bo
     repoId: repo.id,
   }));
 
-  // Process all jobs (parallel for sync, queued for async)
-  await jobProcessor.enqueueAll(syncJobs);
+  // Run syncs in the background: inline sync of a large repository would
+  // otherwise block the packages.json response until every repo finishes
+  runInBackground(c, jobProcessor.enqueueAll(syncJobs).catch((error) => {
+    const logger = getLogger();
+    logger.error('Background repository sync failed', {}, error instanceof Error ? error : new Error(String(error)));
+  }));
 
   return true;
 }

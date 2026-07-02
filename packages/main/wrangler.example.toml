@@ -51,6 +51,7 @@ queue = "package-broker-queue"
 queue = "package-broker-queue"
 max_batch_size = 10
 max_batch_timeout = 30
+max_retries = 3
 
 # Analytics Engine (OPTIONAL - free tier: 100k events/day)
 # Analytics Engine datasets are automatically created on first write.
