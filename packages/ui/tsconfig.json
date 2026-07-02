@@ -3,6 +3,9 @@
   "compilerOptions": {
     "outDir": "./dist",
     "jsx": "react-jsx",
+    "types": [
+      "vite/client"
+    ],
     "lib": [
       "ES2022",
       "DOM",

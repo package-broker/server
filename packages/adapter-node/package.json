@@ -12,7 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.10",
+    "@hono/node-server": "^2.0.8",
     "@package-broker/core": "^0.19.0",
     "@package-broker/shared": "^0.19.0",
     "better-sqlite3": "^12.5.0",
@@ -26,7 +26,7 @@
     "@types/node": "^20.19.27",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "repository": {
     "type": "git",
