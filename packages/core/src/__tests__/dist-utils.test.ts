@@ -4,9 +4,24 @@
  * Licensed under AGPL-3.0
  */
 
-import { describe, it, expect } from 'vitest';
-import { normalizeVersionToDisplay, findVersionInMetadata } from '../routes/dist';
+import { describe, it, expect, vi } from 'vitest';
+import type { Context } from 'hono';
+import { normalizeVersionToDisplay, findVersionInMetadata, distRoute } from '../routes/dist';
 import { deriveVersionNormalized } from '../routes/composer';
+
+vi.mock('../utils/logger', () => ({
+  getLogger: () => ({
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  }),
+}));
+
+vi.mock('../utils/analytics', () => ({
+  getAnalytics: () => ({
+    trackPackageDownload: vi.fn(),
+  }),
+}));
 
 describe('normalizeVersionToDisplay', () => {
   describe('patch versions', () => {
@@ -85,6 +100,44 @@ describe('normalizeVersionToDisplay', () => {
       expect(normalizeVersionToDisplay('1.0.0.0-patch10')).toBe('1.0.0-p10');
       expect(normalizeVersionToDisplay('1.0.0.0-patch99')).toBe('1.0.0-p99');
     });
+  });
+
+  describe('branch dev versions', () => {
+    it('should convert Composer normalized branch versions back to display versions', () => {
+      expect(normalizeVersionToDisplay('1.9999999.9999999.9999999-dev')).toBe('1.x-dev');
+      expect(normalizeVersionToDisplay('2.2.9999999.9999999-dev')).toBe('2.2.x-dev');
+      expect(normalizeVersionToDisplay('5.4.9999999.9999999-dev')).toBe('5.4.x-dev');
+      expect(normalizeVersionToDisplay('4.9999999.9999999.9999999-dev')).toBe('4.x-dev');
+    });
+
+    it('should leave dev branch names unchanged', () => {
+      expect(normalizeVersionToDisplay('dev-master')).toBe('dev-master');
+    });
+  });
+});
+
+describe('deriveVersionNormalized', () => {
+  it('should normalize numeric branch display versions like Composer', () => {
+    expect(deriveVersionNormalized('1.x-dev')).toBe('1.9999999.9999999.9999999-dev');
+    expect(deriveVersionNormalized('2.2.x-dev')).toBe('2.2.9999999.9999999-dev');
+    expect(deriveVersionNormalized('5.4.x-dev')).toBe('5.4.9999999.9999999-dev');
+    expect(deriveVersionNormalized('3.x-dev')).toBe('3.9999999.9999999.9999999-dev');
+    expect(deriveVersionNormalized('1.24.x-dev')).toBe('1.24.9999999.9999999-dev');
+    expect(deriveVersionNormalized('5.x-dev')).toBe('5.9999999.9999999.9999999-dev');
+  });
+
+  it('should leave literal dev branches unchanged', () => {
+    expect(deriveVersionNormalized('dev-master')).toBe('dev-master');
+    expect(deriveVersionNormalized('dev-main')).toBe('dev-main');
+  });
+
+  it('should preserve existing classical version normalization', () => {
+    expect(deriveVersionNormalized('v1.2.3')).toBe('1.2.3.0');
+    expect(deriveVersionNormalized('1.2')).toBe('1.2.0.0');
+    expect(deriveVersionNormalized('1.2-dev')).toBe('1.2.0.0-dev');
+    expect(deriveVersionNormalized('10.0-dev')).toBe('10.0.0.0-dev');
+    expect(deriveVersionNormalized('103.0.7-p8')).toBe('103.0.7.0-patch8');
+    expect(deriveVersionNormalized('2.2.1-beta')).toBe('2.2.1.0-beta');
   });
 });
 
@@ -267,5 +320,152 @@ describe('findVersionInMetadata', () => {
       expect(result).not.toBeNull();
       expect(result?.version).toBe('1.2.3-beta.1');
     });
+
+    it('should match minified metadata branch versions without version_normalized', () => {
+      const versions = [
+        {
+          version: '1.x-dev',
+          metadata: { dist: { url: 'https://example.com/1x.zip', type: 'zip' } },
+        },
+        {
+          version: 'v1.29.0',
+          metadata: { dist: { url: 'https://example.com/v129.zip', type: 'zip' } },
+        },
+      ];
+      const result = findVersionInMetadata(
+        '1.9999999.9999999.9999999-dev',
+        '1.x-dev',
+        versions
+      );
+      expect(result).not.toBeNull();
+      expect(result?.version).toBe('1.x-dev');
+    });
+
+    it('should match minified metadata minor branch versions without version_normalized', () => {
+      const versions = [
+        {
+          version: '2.2.x-dev',
+          metadata: { dist: { url: 'https://example.com/22x.zip', type: 'zip' } },
+        },
+      ];
+      const result = findVersionInMetadata(
+        '2.2.9999999.9999999-dev',
+        '2.2.x-dev',
+        versions
+      );
+      expect(result).not.toBeNull();
+      expect(result?.version).toBe('2.2.x-dev');
+    });
+
+    it('should not match an unrelated normalized branch version', () => {
+      const versions = [
+        {
+          version: '1.x-dev',
+          metadata: { dist: { url: 'https://example.com/1x.zip', type: 'zip' } },
+        },
+      ];
+      const result = findVersionInMetadata(
+        '9.9999999.9999999.9999999-dev',
+        '9.x-dev',
+        versions
+      );
+      expect(result).toBeNull();
+    });
+  });
+});
+
+describe('distRoute mirror branch version resolution', () => {
+  it('should resolve a normalized mirror URL version to a stored pretty branch version', async () => {
+    const artifact = {
+      id: 'artifact-1',
+      repo_id: 'repo-1',
+      package_name: 'symfony/polyfill-ctype',
+      version: '1.x-dev',
+      file_key: 'private/repo-1/symfony/polyfill-ctype/1.x-dev.zip',
+      size: 11,
+      download_count: 0,
+      created_at: 1_700_000_000,
+      last_downloaded_at: null,
+    };
+    const packageRow = {
+      id: 'pkg-1',
+      repo_id: 'repo-1',
+      name: 'symfony/polyfill-ctype',
+      version: '1.x-dev',
+      dist_url: 'https://broker.example/dist/repo-1/symfony/polyfill-ctype/1.x-dev.zip',
+      source_dist_url: 'https://example.com/source.zip',
+      dist_reference: 'abc123',
+      description: null,
+      license: null,
+      package_type: null,
+      homepage: null,
+      released_at: null,
+      readme_content: null,
+      metadata: JSON.stringify({ dist: { type: 'zip' } }),
+      is_manual_upload: 0,
+      created_at: 1_700_000_000,
+    };
+    const selectResults = [
+      [],
+      [{ repo_id: 'repo-1', version: '1.x-dev' }],
+      [artifact],
+      [packageRow],
+    ];
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(() => Promise.resolve(selectResults.shift() ?? [])),
+        })),
+      })),
+    }));
+    const update = vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => Promise.resolve()),
+      })),
+    }));
+    const storageGet = vi.fn(() => Promise.resolve(new Response('zip-content').body));
+    const context = {
+      req: {
+        param: (key: string) => {
+          if (key === 'vendor') return 'symfony';
+          if (key === 'package') return 'polyfill-ctype';
+          if (key === 'version') return '1.9999999.9999999.9999999-dev.zip';
+          return undefined;
+        },
+        header: () => undefined,
+        url: 'https://broker.example/dist/m/symfony/polyfill-ctype/1.9999999.9999999.9999999-dev.zip',
+      },
+      env: {
+        ENCRYPTION_KEY: 'test-key',
+        KV: {},
+      },
+      var: {
+        storage: {
+          get: storageGet,
+          put: vi.fn(),
+          delete: vi.fn(),
+          exists: vi.fn(),
+        },
+      },
+      executionCtx: {
+        waitUntil: vi.fn(),
+      },
+      get: (key: string) => {
+        if (key === 'database') {
+          return { select, update };
+        }
+        if (key === 'requestId') {
+          return 'request-1';
+        }
+        return undefined;
+      },
+      json: vi.fn((data: unknown, status: number) => new Response(JSON.stringify(data), { status })),
+    } as unknown as Context;
+
+    const response = await distRoute(context);
+
+    expect(response.status).toBe(200);
+    expect(storageGet).toHaveBeenCalledWith('private/repo-1/symfony/polyfill-ctype/1.x-dev.zip');
+    expect(select).toHaveBeenCalledTimes(4);
   });
 });

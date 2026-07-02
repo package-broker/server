@@ -810,10 +810,73 @@ export function buildP2Response(
 }
 
 export function deriveVersionNormalized(version: string): string | undefined {
-  const v = version.startsWith('v') ? version.slice(1) : version;
+  const v = version.trim();
+
+  if (v.startsWith('dev-')) {
+    return v;
+  }
+
+  const versionWithoutV = v.startsWith('v') ? v.slice(1) : v;
+
+  const isNumericSegment = (part: string): boolean => {
+    if (part.length === 0) {
+      return false;
+    }
+
+    for (let i = 0; i < part.length; i++) {
+      const ch = part.charCodeAt(i);
+      if (ch < 48 || ch > 57) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const normalizeBranchName = (branchName: string): string | undefined => {
+    const branchWithoutV = branchName.startsWith('v') ? branchName.slice(1) : branchName;
+    const parts = branchWithoutV.split('.');
+
+    if (parts.length < 1 || parts.length > 4) {
+      return undefined;
+    }
+
+    const normalizedParts: string[] = [];
+    for (const part of parts) {
+      if (isNumericSegment(part)) {
+        normalizedParts.push(part);
+      } else if (part === 'x' || part === 'X' || part === '*') {
+        normalizedParts.push('9999999');
+      } else {
+        return undefined;
+      }
+    }
+
+    while (normalizedParts.length < 4) {
+      normalizedParts.push('9999999');
+    }
+
+    return `${normalizedParts.join('.')}-dev`;
+  };
+
+  const lowerVersion = versionWithoutV.toLowerCase();
+  let branchName: string | null = null;
+  if (lowerVersion.endsWith('-dev') || lowerVersion.endsWith('.dev')) {
+    branchName = versionWithoutV.slice(0, -4);
+  }
+
+  if (branchName) {
+    if (branchName.includes('x') || branchName.includes('X') || branchName.includes('*')) {
+      const normalizedBranch = normalizeBranchName(branchName);
+      if (normalizedBranch) {
+        return normalizedBranch;
+      }
+    }
+
+  }
 
   // Handle patch versions (e.g., "103.0.7-p8" → "103.0.7.0-patch8")
-  const patchMatch = v.match(/^(\d+\.\d+\.\d+)-p(\d+)$/);
+  const patchMatch = versionWithoutV.match(/^(\d+\.\d+\.\d+)-p(\d+)$/);
   if (patchMatch) {
     const [, base, patch] = patchMatch;
     return `${base}.0-patch${patch}`;
@@ -823,14 +886,14 @@ export function deriveVersionNormalized(version: string): string | undefined {
   // 1. Parse up to 4 numeric segments separated by dots from the start of the string.
   // 2. Treat everything after the parsed numeric part as the suffix (e.g., "-beta", "-alpha", "-dev").
   let index = 0;
-  const length = v.length;
+  const length = versionWithoutV.length;
   const segments: string[] = [];
 
   while (index < length && segments.length < 4) {
     const start = index;
     // Read a numeric segment
     while (index < length) {
-      const ch = v.charCodeAt(index);
+      const ch = versionWithoutV.charCodeAt(index);
       if (ch < 48 || ch > 57) { // not '0'–'9'
         break;
       }
@@ -840,7 +903,7 @@ export function deriveVersionNormalized(version: string): string | undefined {
       // No digits found where a segment was expected
       break;
     }
-    segments.push(v.slice(start, index));
+    segments.push(versionWithoutV.slice(start, index));
 
     // If we have 4 segments or we've reached the end, stop
     if (segments.length === 4 || index >= length) {
@@ -848,7 +911,7 @@ export function deriveVersionNormalized(version: string): string | undefined {
     }
 
     // Expect a dot between segments; if not present, stop parsing numeric part
-    if (v[index] === '.') {
+    if (versionWithoutV[index] === '.') {
       index++;
       continue;
     }
@@ -857,7 +920,7 @@ export function deriveVersionNormalized(version: string): string | undefined {
 
   if (segments.length > 0) {
     const [major, minor = '0', patch = '0', build = '0'] = segments;
-    const suffix = v.slice(index); // everything after the numeric part
+    const suffix = versionWithoutV.slice(index); // everything after the numeric part
     return `${major}.${minor}.${patch}.${build}${suffix}`;
   }
 
