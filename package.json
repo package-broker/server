@@ -27,7 +27,7 @@
     "@commitlint/cli": "^20.2.0",
     "@commitlint/config-conventional": "^20.2.0",
     "@playwright/test": "^1.57.0",
-    "@types/node": "^26.1.0",
+    "@types/node": "^22.20.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.16",
     "wrangler": "^4.66.0",
