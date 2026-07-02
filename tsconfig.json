@@ -15,7 +15,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "baseUrl": ".",
+    "rootDir": ".",
     "paths": {
       "@package-broker/core": [
         "./packages/core/src"
