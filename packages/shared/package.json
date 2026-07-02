@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/shared",
-  "version": "0.19.2",
+  "version": "0.19.3",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
