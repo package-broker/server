@@ -264,21 +264,37 @@ describe('securityAdvisoriesPlugin', () => {
   });
 
   it('should subscribe to package.synced events', async () => {
-    const ctx: PluginContext<any, any> = {
-      services: new ServiceContainer(),
-      events: new EventBus(),
-      hooks: new HookRegistry(),
-    };
+    // The plugin's event handler queries the Packagist advisories API with
+    // the default global fetch — stub it so the test never hits the network.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(SAMPLE_ADVISORIES_RESPONSE), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
 
-    await loadPlugin(securityAdvisoriesPlugin as any, ctx);
+    try {
+      const ctx: PluginContext<any, any> = {
+        services: new ServiceContainer(),
+        events: new EventBus(),
+        hooks: new HookRegistry(),
+      };
 
-    // Emit a package.synced event — should not throw
-    await expect(
-      ctx.events.emit('package.synced', {
-        packageName: 'safe/package',
-        version: '1.0.0',
-      }),
-    ).resolves.toBeUndefined();
+      await loadPlugin(securityAdvisoriesPlugin as any, ctx);
+
+      // Emit a package.synced event — should not throw
+      await expect(
+        ctx.events.emit('package.synced', {
+          packageName: 'safe/package',
+          version: '1.0.0',
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('should add a sync observer', async () => {

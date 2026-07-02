@@ -22,6 +22,7 @@ import { getAnalytics } from '../utils/analytics';
 import { type AuthContext } from '../middleware/auth';
 import { lazyLoadPackageFromRepositories, normalizePackageVersions, storePackageInDB, deriveVersionNormalized } from './composer';
 import { computeShasum } from '../utils/checksum';
+import { runInBackground } from '../utils/background';
 
 export interface DistRouteEnv {
   Bindings: {
@@ -524,7 +525,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 logger.info('Successfully stored Packagist artifact in storage', { storageKey, size: totalSize, packageName, version });
 
                 if (computedShasum) {
-                  c.executionCtx.waitUntil(
+                  runInBackground(c,
                     (async () => {
                       try {
                         const [pkg] = await db
@@ -570,7 +571,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                   );
                 }
 
-                c.executionCtx.waitUntil(
+                runInBackground(c,
                   extractAndStoreReadme(
                     storage,
                     combined,
@@ -589,7 +590,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
               const now = Math.floor(Date.now() / 1000);
               if (artifact) {
                 // Update existing artifact record
-                c.executionCtx.waitUntil(
+                runInBackground(c,
                   db
                     .update(artifacts)
                     .set({
@@ -605,7 +606,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
               } else {
                 // Create new artifact record
                 const artifactId = nanoid();
-                c.executionCtx.waitUntil(
+                runInBackground(c,
                   db
                     .insert(artifacts)
                     .values({
@@ -741,7 +742,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                 await storage.put(storageKey, arrayBuffer);
                 
                 if (computedShasum && pkg) {
-                  c.executionCtx.waitUntil(
+                  runInBackground(c,
                     (async () => {
                       try {
                         const metadata = pkg.metadata ? JSON.parse(pkg.metadata) : {};
@@ -769,7 +770,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
                   );
                 }
                 
-                c.executionCtx.waitUntil(
+                runInBackground(c,
                   extractAndStoreReadme(
                     storage,
                     combined,
@@ -803,14 +804,14 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
               };
 
               if (artifact) {
-                c.executionCtx.waitUntil(
+                runInBackground(c,
                   db.update(artifacts)
                     .set({ size: totalSize, created_at: now })
                     .where(eq(artifacts.id, artifact.id))
                     .catch(() => { })
                 );
               } else {
-                c.executionCtx.waitUntil(
+                runInBackground(c,
                   db.insert(artifacts)
                     .values({ ...artifactData, download_count: 0 })
                     .onConflictDoNothing()
@@ -859,7 +860,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
       };
 
       // Run in background to not block the response
-      c.executionCtx.waitUntil(updateDownloadCount());
+      runInBackground(c, updateDownloadCount());
     }
 
     // Get dist.type from package metadata to determine Content-Type
@@ -1129,7 +1130,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
         computedShasum = computeShasum(combined);
       }
 
-      c.executionCtx.waitUntil(
+      runInBackground(c,
         (async () => {
           try {
             const arrayBuffer = combined.buffer.slice(
@@ -1228,7 +1229,7 @@ export async function distRoute(c: Context<DistRouteEnv>): Promise<Response> {
 
   // Update download count (non-blocking)
   if (artifact) {
-    c.executionCtx.waitUntil(
+    runInBackground(c,
       (async () => {
         if (c.env.QUEUE && typeof c.env.QUEUE.send === 'function') {
           await c.env.QUEUE.send({

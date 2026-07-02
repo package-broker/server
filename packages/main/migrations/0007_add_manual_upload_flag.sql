@@ -1,8 +1,7 @@
--- Add is_manual_upload flag to packages table
--- This field marks packages that were manually uploaded vs synced from repositories
+-- Historical no-op: is_manual_upload is already part of the packages schema
+-- in 0001_initial.sql (snapshot) and the packages rebuild in
+-- 0004_fix_package_unique.sql, so re-adding the column breaks fresh databases.
+-- Databases that applied the original version of this migration have it
+-- recorded in d1_migrations and never re-run it.
 
-ALTER TABLE packages ADD COLUMN is_manual_upload INTEGER DEFAULT 0 NOT NULL;
-
--- Index for filtering manual uploads
-CREATE INDEX idx_packages_manual_upload ON packages(is_manual_upload);
-
+CREATE INDEX IF NOT EXISTS idx_packages_manual_upload ON packages(is_manual_upload);

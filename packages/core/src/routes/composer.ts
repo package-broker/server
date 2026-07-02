@@ -18,6 +18,7 @@ import { nanoid } from 'nanoid';
 import { encryptCredentials } from '../utils/encryption';
 import { getLogger } from '../utils/logger';
 import { getAnalytics } from '../utils/analytics';
+import { runInBackground } from '../utils/background';
 
 export interface ComposerRouteEnv {
   Bindings: {
@@ -59,7 +60,7 @@ function schedulePackageStorage(
 
   if (workflow) {
     // Use Cloudflare Workflow for durable background processing
-    c.executionCtx.waitUntil((async () => {
+    runInBackground(c, (async () => {
       try {
         const instance = await workflow.create({
           id: `pkg-${packageName.replace('/', '-')}-${repoId}-${Date.now()}`,
@@ -95,7 +96,7 @@ function schedulePackageStorage(
     })());
   } else {
     // Inline background processing
-    c.executionCtx.waitUntil((async () => {
+    runInBackground(c, (async () => {
       try {
         const db = c.get('database');
         const { storedCount, errors } = await transformPackageDistUrls(packageData, repoId, baseUrl, db);
@@ -174,7 +175,7 @@ export async function packagesJsonRoute(c: Context<ComposerRouteEnv>): Promise<R
   // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
   const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
   if (cachingEnabled && c.env.KV) {
-    c.executionCtx.waitUntil(
+    runInBackground(c,
       Promise.all([
         c.env.KV.put(kvKey, JSON.stringify(packagesJson)).catch(() => { }),
         c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() })).catch(() => { })
@@ -309,6 +310,7 @@ export async function lazyLoadPackageFromRepositories(
   
   if (mirroringEnabled) {
     try {
+      await ensurePackagistRepository(db, encryptionKey, kv || undefined);
       const packagistUrl = `https://repo.packagist.org/p2/${packageName}.json`;
       const response = await fetch(packagistUrl, {
         headers: {
@@ -377,7 +379,7 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
         logger.warn('Invalid cache format (not an object or old format), treating as cache miss', { packageName });
         // Fire-and-forget cache deletion
         if (c.env.KV) {
-          c.executionCtx.waitUntil(
+          runInBackground(c,
             Promise.all([
               c.env.KV.delete(kvKey).catch(() => { }),
               c.env.KV.delete(metadataKey).catch(() => { })
@@ -412,7 +414,7 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
       logger.warn('Invalid JSON in cache, treating as cache miss', { packageName, error: e instanceof Error ? e.message : String(e) });
       // Fire-and-forget cache deletion
       if (c.env.KV) {
-        c.executionCtx.waitUntil(
+        runInBackground(c,
           Promise.all([
             c.env.KV.delete(kvKey).catch(() => { }),
             c.env.KV.delete(metadataKey).catch(() => { })
@@ -438,7 +440,7 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
     // Cache the result (fire-and-forget to avoid blocking on KV rate limits)
     const cachingEnabled = await isPackageCachingEnabled(c.env.KV);
     if (cachingEnabled && c.env.KV) {
-      c.executionCtx.waitUntil(
+      runInBackground(c,
         Promise.all([
           c.env.KV.put(kvKey, JSON.stringify(packageData)).catch(() => { }),
           c.env.KV.put(metadataKey, JSON.stringify({ lastModified: Date.now() })).catch(() => { })
