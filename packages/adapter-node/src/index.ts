@@ -108,6 +108,8 @@ async function start() {
                 (c.env as any) = {
                     ...(c.env || {}),
                     ENCRYPTION_KEY: encryptionKey,
+                    KV: cache,
+                    QUEUE: queue,
                     // Pass SMTP configuration from process.env
                     SMTP_HOST: process.env.SMTP_HOST,
                     SMTP_PORT: process.env.SMTP_PORT,

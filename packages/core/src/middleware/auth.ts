@@ -7,6 +7,7 @@ import type { DatabasePort } from '../ports';
 import { tokens, tokenScopes } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { TokenScopeService } from '../services/TokenScopeService';
+import { runInBackground } from '../utils/background';
 
 const VALID_SCOPE_TYPES = new Set(['repository', 'package_pattern']);
 
@@ -198,7 +199,8 @@ export async function distAuthMiddleware(
 
     // Cache for 5 seconds to handle burst requests (only if rate limiting is enabled)
     if (tokenRecord) {
-      c.executionCtx.waitUntil(
+      runInBackground(
+        c,
         c.env.KV.put(cacheKey, JSON.stringify(tokenRecord), { expirationTtl: 5 }).catch(() => {
           // Ignore cache errors
         })
@@ -233,7 +235,8 @@ export async function distAuthMiddleware(
   });
 
   // Update last_used_at (non-blocking)
-  c.executionCtx.waitUntil(
+  runInBackground(
+    c,
     (async () => {
       const db = c.get('database');
       if (c.env.QUEUE && typeof c.env.QUEUE.send === 'function') {
@@ -324,7 +327,8 @@ export async function authMiddleware(
 
     // Cache for 5 seconds to handle burst requests (only if rate limiting is enabled)
     if (tokenRecord) {
-      c.executionCtx.waitUntil(
+      runInBackground(
+        c,
         c.env.KV.put(cacheKey, JSON.stringify(tokenRecord), { expirationTtl: 5 }).catch(() => {
           // Ignore cache errors
         })
@@ -392,7 +396,7 @@ export async function authMiddleware(
   };
 
   // Run in background to not block the response
-  c.executionCtx.waitUntil(updateTokenLastUsed());
+  runInBackground(c, updateTokenLastUsed());
 
   return await next();
 }

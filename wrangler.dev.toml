@@ -12,6 +12,7 @@ LOG_LEVEL = "debug"
 binding = "DB"
 database_name = "package-broker-db"
 database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+migrations_dir = "packages/main/migrations"
 
 # KV Namespace for caching
 [[kv_namespaces]]
