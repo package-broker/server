@@ -209,6 +209,23 @@ function extractVersionFromParam(versionParam: string | undefined): string {
 }
 
 export function normalizeVersionToDisplay(version: string): string {
+  if (version.endsWith('-dev')) {
+    const versionPart = version.slice(0, -4);
+    const parts = versionPart.split('.');
+    const firstWildcardIndex = parts.indexOf('9999999');
+
+    if (
+      firstWildcardIndex > 0 &&
+      parts.length <= 4 &&
+      parts.slice(0, firstWildcardIndex).every((part) => /^\d+$/.test(part)) &&
+      parts.slice(firstWildcardIndex).every((part) => part === '9999999')
+    ) {
+      const displayParts = parts.slice(0, firstWildcardIndex);
+      displayParts.push('x');
+      return `${displayParts.join('.')}-dev`;
+    }
+  }
+
   const patchMatch = version.match(/^(\d+\.\d+\.\d+)\.0-patch(\d+)$/);
   if (patchMatch) {
     const [, base, patch] = patchMatch;
