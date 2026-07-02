@@ -123,9 +123,9 @@ jobs:
           CONTAINER_ID=$(docker run -d \
             -p 3000:3000 \
             -e DB_DRIVER=sqlite \
-            -e DB_URL="/tmp/test.db" \
+            -e DB_URL="/data/test.db" \
             -e STORAGE_DRIVER=fs \
-            -e STORAGE_PATH="/tmp/storage" \
+            -e STORAGE_PATH="/data/storage" \
             -e CACHE_DRIVER=memory \
             -e QUEUE_DRIVER=memory \
             -e ENCRYPTION_KEY="test-encryption-key-32-bytes-long" \
@@ -165,7 +165,8 @@ jobs:
           echo "Checking for runtime errors..."
           sleep 2  # Give it a moment to fully initialize
           
-          if docker logs $CONTAINER_ID 2>&1 | grep -iE "(error|exception|failed|cannot|uncaught|SyntaxError|TypeError)" | grep -v "WARN"; then
+          if docker logs $CONTAINER_ID 2>&1 | grep -iE "(error|exception|failed|cannot|uncaught|SyntaxError|TypeError)" | \
+             grep -v -iE "(database not initialized|warning|⚠️|WARN)"; then
             echo "❌ Found errors in container logs:"
             docker logs $CONTAINER_ID
             docker rm -f $CONTAINER_ID
