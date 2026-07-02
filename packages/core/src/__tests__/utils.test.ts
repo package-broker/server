@@ -57,3 +57,25 @@ describe('Download Utils', () => {
             .rejects.toThrow('Authentication failed');
     });
 });
+
+describe('parseGitHubOwnerRepo', () => {
+    it('parses https URLs and drops the .git suffix', async () => {
+        const { parseGitHubOwnerRepo } = await import('../utils/upstream-fetch');
+        expect(parseGitHubOwnerRepo('https://github.com/Weltpixel/magento2-weltpixel-backend.git'))
+            .toEqual({ owner: 'Weltpixel', repoName: 'magento2-weltpixel-backend' });
+    });
+
+    it('parses ssh URLs', async () => {
+        const { parseGitHubOwnerRepo } = await import('../utils/upstream-fetch');
+        expect(parseGitHubOwnerRepo('git@github.com:acme/widget.git'))
+            .toEqual({ owner: 'acme', repoName: 'widget' });
+    });
+
+    it('rejects non-GitHub and malformed URLs', async () => {
+        const { parseGitHubOwnerRepo } = await import('../utils/upstream-fetch');
+        expect(parseGitHubOwnerRepo('https://gitlab.com/acme/widget')).toBeNull();
+        expect(parseGitHubOwnerRepo('https://github.com')).toBeNull();
+        expect(parseGitHubOwnerRepo('https://github.com/acme')).toBeNull();
+        expect(parseGitHubOwnerRepo('https://github.com//widget')).toBeNull();
+    });
+});
