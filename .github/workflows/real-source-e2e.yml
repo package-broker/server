@@ -30,12 +30,12 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          tools: composer
-          coverage: none
+      - name: Verify preinstalled PHP and Composer
+        # ubuntu-latest runners ship PHP 8.3 + Composer; shivammathur/setup-php
+        # is not on the org Actions allowlist, so rely on the runner image.
+        run: |
+          php --version
+          composer --version
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -108,12 +108,12 @@ jobs:
           node-version: '22.x'
           cache: 'npm'
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          tools: composer
-          coverage: none
+      - name: Verify preinstalled PHP and Composer
+        # ubuntu-latest runners ship PHP 8.3 + Composer; shivammathur/setup-php
+        # is not on the org Actions allowlist, so rely on the runner image.
+        run: |
+          php --version
+          composer --version
 
       - name: Install dependencies
         run: npm ci
