@@ -18,7 +18,16 @@ CREATE TABLE packages_new (
   created_at INTEGER NOT NULL
 );
 
-INSERT INTO packages_new SELECT * FROM packages;
+-- Explicit column list: positional SELECT * corrupts databases where
+-- is_manual_upload was appended by the original 0007 ALTER TABLE (after
+-- created_at), which reverses the last two columns vs. this table.
+INSERT INTO packages_new (id, repo_id, name, version, dist_url, source_dist_url,
+  dist_reference, description, license, package_type, homepage, released_at,
+  readme_content, metadata, is_manual_upload, created_at)
+SELECT id, repo_id, name, version, dist_url, source_dist_url,
+  dist_reference, description, license, package_type, homepage, released_at,
+  readme_content, metadata, is_manual_upload, created_at
+FROM packages;
 DROP TABLE packages;
 ALTER TABLE packages_new RENAME TO packages;
 
