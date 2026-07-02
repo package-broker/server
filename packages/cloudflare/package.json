@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/cloudflare",
-  "version": "0.19.6",
+  "version": "0.19.7",
   "description": "Interactive CLI tool for deploying PACKAGE.broker to Cloudflare Workers",
   "type": "module",
   "bin": {
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",
-    "@package-broker/main": "^0.19.6",
+    "@package-broker/main": "^0.19.7",
     "execa": "^9.6.1",
     "prompts": "^2.4.2",
     "wrangler": "^4.66.0"

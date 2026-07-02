@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/main",
-  "version": "0.19.6",
+  "version": "0.19.7",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,8 +26,8 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@package-broker/core": "^0.19.6",
-    "@package-broker/ui": "^0.19.6"
+    "@package-broker/core": "^0.19.7",
+    "@package-broker/ui": "^0.19.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260108.0",
