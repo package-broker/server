@@ -75,27 +75,6 @@ export async function processQueueMessage(
   }
 }
 
-/**
- * Queue consumer worker entry point
- * This will be called by Cloudflare Queue when messages are available
- */
-export default {
-  async queue(batch: MessageBatch<QueueMessage>, env: QueueConsumerEnv): Promise<void> {
-    // Process messages in batch (optimize for free tier)
-    const promises = batch.messages.map((msg) => {
-      try {
-        return processQueueMessage(msg.body, env);
-      } catch (error) {
-        const logger = getLogger();
-        logger.error('Error processing queue message', { messageType: msg.body.type }, error instanceof Error ? error : new Error(String(error)));
-        // Don't retry on error - log and continue
-        return Promise.resolve();
-      }
-    });
-
-    await Promise.all(promises);
-  },
-};
 
 
 

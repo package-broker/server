@@ -68,27 +68,38 @@ export function createJobProcessor(
   env: JobEnv,
   options?: { syncOptions?: SyncOptions }
 ): JobProcessor {
+  const syncProcessor = new SyncJobProcessor(env, options?.syncOptions);
   if (env.QUEUE && typeof env.QUEUE.send === 'function') {
-    return new QueueJobProcessor(env.QUEUE);
+    return new QueueJobProcessor(env.QUEUE, syncProcessor);
   }
-  return new SyncJobProcessor(env, options?.syncOptions);
+  return syncProcessor;
 }
 
 /**
  * Queue-based job processor - sends jobs to Cloudflare Queue
  * Jobs are processed asynchronously by queue consumers
+ *
+ * sync_repository jobs are the exception: they need request-scoped context
+ * (storage driver, proxy base URL) that a queue consumer does not have, so
+ * they always run inline via the SyncJobProcessor fallback.
  */
 class QueueJobProcessor implements JobProcessor {
-  constructor(private queue: Queue) { }
+  constructor(
+    private queue: Queue,
+    private inlineProcessor: SyncJobProcessor
+  ) { }
 
   async enqueue(job: Job): Promise<void> {
+    if (job.type === 'sync_repository') {
+      await this.inlineProcessor.enqueue(job);
+      return;
+    }
     await this.queue.send(job);
   }
 
   async enqueueAll(jobs: Job[]): Promise<void> {
-    // Queue supports batch sending
     for (const job of jobs) {
-      await this.queue.send(job);
+      await this.enqueue(job);
     }
   }
 }

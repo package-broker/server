@@ -349,22 +349,57 @@ async function fetchFromIncludes(
  * @param packageName - Package name to fetch (e.g., "weltpixel/magento2-weltpixel-social-login")
  * @param encryptionKey - Key for decrypting credentials
  */
+/**
+ * Extract owner and repository name from a GitHub URL (https or ssh form).
+ * Linear scan equivalent of /github\.com[:\/]([^\/]+)\/([^\/.]+)/ without
+ * the polynomial backtracking CodeQL flags on attacker-influenced input.
+ * The repo name stops at the first '.' or '/' (drops the '.git' suffix).
+ */
+export function parseGitHubOwnerRepo(url: string): { owner: string; repoName: string } | null {
+  const host = 'github.com';
+  const hostIndex = url.indexOf(host);
+  if (hostIndex === -1) {
+    return null;
+  }
+
+  const separator = url[hostIndex + host.length];
+  if (separator !== ':' && separator !== '/') {
+    return null;
+  }
+
+  const rest = url.slice(hostIndex + host.length + 1);
+  const slashIndex = rest.indexOf('/');
+  if (slashIndex <= 0) {
+    return null;
+  }
+
+  const owner = rest.slice(0, slashIndex);
+  const afterOwner = rest.slice(slashIndex + 1);
+
+  let end = 0;
+  while (end < afterOwner.length && afterOwner[end] !== '/' && afterOwner[end] !== '.') {
+    end++;
+  }
+  const repoName = afterOwner.slice(0, end);
+
+  return repoName.length > 0 ? { owner, repoName } : null;
+}
+
 export async function fetchPackageFromGitHub(
   repo: UpstreamRepository,
   packageName: string,
   encryptionKey: string
 ): Promise<ProviderPackageResponse | null> {
   const logger = getLogger();
-  
-  // Parse GitHub URL
-  const urlMatch = repo.url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
-  if (!urlMatch) {
+
+  // Parse GitHub URL (explicit scan - avoids regex backtracking on untrusted input)
+  const parsed = parseGitHubOwnerRepo(repo.url);
+  if (!parsed) {
     logger.warn('Invalid GitHub URL format', { url: repo.url });
     return null;
   }
-  
-  const [, owner, repoName] = urlMatch;
-  const cleanRepoName = repoName.replace('.git', '');
+
+  const { owner, repoName: cleanRepoName } = parsed;
   
   // Get token (null for public repos with 'none' credential type)
   let token: string | null = null;

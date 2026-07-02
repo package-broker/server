@@ -48,13 +48,55 @@ describe('Job Processor', () => {
     });
 
     describe('QueueJobProcessor', () => {
-        it('should send job to queue', async () => {
+        it('should send lightweight jobs to queue', async () => {
             const sendMock = vi.fn();
             const queueEnv = { ...mockEnv, QUEUE: { send: sendMock } as any };
             const processor = createJobProcessor(queueEnv);
 
-            await processor.enqueue({ type: 'sync_repository', repoId: '123' });
-            expect(sendMock).toHaveBeenCalledWith({ type: 'sync_repository', repoId: '123' });
+            await processor.enqueue({ type: 'update_token_last_used', tokenId: 'token1', timestamp: 123 });
+            expect(sendMock).toHaveBeenCalledWith({ type: 'update_token_last_used', tokenId: 'token1', timestamp: 123 });
+        });
+
+        it('should process sync_repository inline instead of queueing', async () => {
+            // The queue consumer has no request context (storage driver, proxy base URL),
+            // so sync jobs must run inline even when a queue producer is bound.
+            const sendMock = vi.fn();
+            const queueEnv = { ...mockEnv, QUEUE: { send: sendMock } as any };
+            const syncOptions = { storage: {} as any, proxyBaseUrl: 'url' };
+            const processor = createJobProcessor(queueEnv, { syncOptions });
+
+            vi.mocked(syncRepository).mockResolvedValue({ success: true, packages: [] });
+
+            await processor.enqueue({ type: 'sync_repository', repoId: 'repo1' });
+
+            expect(sendMock).not.toHaveBeenCalled();
+            expect(syncRepository).toHaveBeenCalledWith(
+                'repo1',
+                expect.objectContaining({ DB: mockEnv.DB }),
+                syncOptions
+            );
+        });
+
+        it('should split mixed batches between queue and inline execution', async () => {
+            const sendMock = vi.fn();
+            const queueEnv = { ...mockEnv, QUEUE: { send: sendMock } as any };
+            const syncOptions = { storage: {} as any, proxyBaseUrl: 'url' };
+            const processor = createJobProcessor(queueEnv, { syncOptions });
+
+            vi.mocked(syncRepository).mockResolvedValue({ success: true, packages: [] });
+
+            await processor.enqueueAll([
+                { type: 'sync_repository', repoId: 'repo1' },
+                { type: 'update_token_last_used', tokenId: 'token1', timestamp: 123 },
+            ]);
+
+            expect(sendMock).toHaveBeenCalledTimes(1);
+            expect(sendMock).toHaveBeenCalledWith({ type: 'update_token_last_used', tokenId: 'token1', timestamp: 123 });
+            expect(syncRepository).toHaveBeenCalledWith(
+                'repo1',
+                expect.objectContaining({ DB: mockEnv.DB }),
+                syncOptions
+            );
         });
     });
 
@@ -89,7 +131,7 @@ describe('Job Processor', () => {
             const syncOptions = { storage: {} as any, proxyBaseUrl: 'url' };
             const processor = createJobProcessor(mockEnv, { syncOptions });
 
-            (syncRepository as any).mockResolvedValue({ success: true, packages: [] });
+            vi.mocked(syncRepository).mockResolvedValue({ success: true, packages: [] });
 
             await processor.enqueue({ type: 'sync_repository', repoId: 'repo1' });
 

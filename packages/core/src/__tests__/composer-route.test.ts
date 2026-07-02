@@ -78,10 +78,91 @@ describe('p2PackageRoute', () => {
         // With the fix, the invalid cache should be ignored (treated as miss) and DELETED.
         expect(mockKv.delete).toHaveBeenCalledWith('p2:pdepend/pdepend~dev');
 
-        // Execution proceeds. Since our mock KV returns garbage for settings too, 
+        // Execution proceeds. Since our mock KV returns garbage for settings too,
         // mirroringEnabled will likely be false (checks if value === 'true' or null).
         // So it should eventually return 404 via c.json().
         // We check that it did NOT crash and proceeded past cache check.
         expect(mockContext.json).toHaveBeenCalled();
+    });
+
+    it('should cache DB responses with a TTL and schedule stale revalidation', async () => {
+        const packageRow = {
+            id: 'pkg1',
+            repo_id: 'repo1',
+            name: 'acme/widget',
+            version: '1.0.0',
+            dist_url: '/dist/repo1/acme/widget/1.0.0.zip',
+            source_dist_url: 'https://upstream.example.com/widget-1.0.0.zip',
+            dist_reference: 'ref',
+            description: null,
+            license: null,
+            package_type: null,
+            homepage: null,
+            released_at: 1700000000,
+            readme_content: null,
+            metadata: JSON.stringify({
+                name: 'acme/widget',
+                version: '1.0.0',
+                dist: { type: 'zip', url: 'https://upstream.example.com/widget-1.0.0.zip' },
+            }),
+            created_at: 1700000000,
+        };
+
+        const mockKv = {
+            get: vi.fn().mockResolvedValue(null),
+            put: vi.fn().mockResolvedValue(undefined),
+            delete: vi.fn().mockResolvedValue(undefined),
+        };
+
+        const backgroundPromises: Promise<unknown>[] = [];
+
+        const mockContext = {
+            req: {
+                param: (key: string) => {
+                    if (key === 'vendor') return 'acme';
+                    if (key === 'package') return 'widget.json';
+                    return undefined;
+                },
+                header: () => undefined,
+                url: 'http://localhost/p2/acme/widget.json',
+            },
+            env: {
+                KV: mockKv,
+                DB: {},
+                ENCRYPTION_KEY: 'key',
+            },
+            executionCtx: {
+                waitUntil: vi.fn((p: Promise<unknown>) => backgroundPromises.push(p)),
+            },
+            get: (key: string) => {
+                if (key === 'database') {
+                    return {
+                        select: vi.fn().mockReturnValue({
+                            from: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue([packageRow]),
+                            }),
+                        }),
+                    };
+                }
+                if (key === 'requestId') return 'req-123';
+                return undefined;
+            },
+            json: vi.fn((data, status) => new Response(JSON.stringify(data), { status })),
+        } as unknown as Context;
+
+        const response = await p2PackageRoute(mockContext);
+        await Promise.all(backgroundPromises);
+
+        expect(response.status).toBe(200);
+
+        // Cached p2 responses must expire so stale metadata cannot be served forever
+        expect(mockKv.put).toHaveBeenCalledWith(
+            'p2:acme/widget',
+            expect.any(String),
+            expect.objectContaining({ expirationTtl: expect.any(Number) })
+        );
+
+        // One background task scheduled: cache write chained with stale revalidation
+        expect(backgroundPromises.length).toBe(1);
     });
 });
