@@ -1,0 +1,157 @@
+name: Real Source E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-source-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    name: Docker / Node real-source E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BROKER_URL: http://localhost:3000
+      EXPECT_DEV_VERSION_FIX: "false" # Known bug: flip to true after fix/dev-version-mirroring lands.
+      MAGENTO_AVAILABLE: ${{ secrets.MAGENTO_PUBLIC_KEY != '' && secrets.MAGENTO_PRIVATE_KEY != '' && 'true' || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+          coverage: none
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.server
+          tags: package-broker-server:real-source-e2e
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start Docker broker
+        run: |
+          set -euo pipefail
+          CONTAINER_ID=$(docker run -d \
+            -p 3000:3000 \
+            -e DB_DRIVER=sqlite \
+            -e DB_URL="/data/real-source-e2e.db" \
+            -e STORAGE_DRIVER=fs \
+            -e STORAGE_PATH="/data/storage" \
+            -e CACHE_DRIVER=memory \
+            -e QUEUE_DRIVER=memory \
+            -e ENCRYPTION_KEY="test-encryption-key-32-bytes-long" \
+            package-broker-server:real-source-e2e)
+          echo "BROKER_DOCKER_CONTAINER=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "BROKER_LOG_FILE=$RUNNER_TEMP/docker-broker.log" >> "$GITHUB_ENV"
+          docker logs -f "$CONTAINER_ID" > "$RUNNER_TEMP/docker-broker.log" 2>&1 &
+
+      - name: Run real-source E2E without Magento credentials
+        if: env.MAGENTO_AVAILABLE != 'true'
+        run: node scripts/real-source-e2e.mjs "$BROKER_URL"
+
+      - name: Run real-source E2E with Magento credentials
+        if: env.MAGENTO_AVAILABLE == 'true'
+        run: node scripts/real-source-e2e.mjs "$BROKER_URL"
+        env:
+          MAGENTO_PUBLIC_KEY: ${{ secrets.MAGENTO_PUBLIC_KEY }}
+          MAGENTO_PRIVATE_KEY: ${{ secrets.MAGENTO_PRIVATE_KEY }}
+
+      - name: Print Docker broker logs on failure
+        if: failure()
+        run: docker logs --tail 300 "$BROKER_DOCKER_CONTAINER" || true
+
+      - name: Stop Docker broker
+        if: always()
+        run: |
+          if [ -n "${BROKER_DOCKER_CONTAINER:-}" ]; then
+            docker rm -f "$BROKER_DOCKER_CONTAINER" || true
+          fi
+
+  workers:
+    name: Cloudflare Workers real-source E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BROKER_URL: http://localhost:8787
+      EXPECT_DEV_VERSION_FIX: "false" # Known bug: flip to true after fix/dev-version-mirroring lands.
+      MAGENTO_AVAILABLE: ${{ secrets.MAGENTO_PUBLIC_KEY != '' && secrets.MAGENTO_PRIVATE_KEY != '' && 'true' || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+          coverage: none
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build UI assets
+        run: npm run build -w packages/ui
+
+      - name: Apply local D1 migrations
+        run: npm run db:migrate
+
+      - name: Start Workers broker
+        run: |
+          set -euo pipefail
+          echo "BROKER_LOG_FILE=$RUNNER_TEMP/wrangler-broker.log" >> "$GITHUB_ENV"
+          CHOKIDAR_USEPOLLING=1 npx wrangler dev -c wrangler.dev.toml --local --port 8787 --live-reload=false --show-interactive-dev-session=false > "$RUNNER_TEMP/wrangler-broker.log" 2>&1 &
+          echo "WRANGLER_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Run real-source E2E without Magento credentials
+        if: env.MAGENTO_AVAILABLE != 'true'
+        run: node scripts/real-source-e2e.mjs "$BROKER_URL"
+
+      - name: Run real-source E2E with Magento credentials
+        if: env.MAGENTO_AVAILABLE == 'true'
+        run: node scripts/real-source-e2e.mjs "$BROKER_URL"
+        env:
+          MAGENTO_PUBLIC_KEY: ${{ secrets.MAGENTO_PUBLIC_KEY }}
+          MAGENTO_PRIVATE_KEY: ${{ secrets.MAGENTO_PRIVATE_KEY }}
+
+      - name: Print Workers broker logs on failure
+        if: failure()
+        run: |
+          if [ -n "${BROKER_LOG_FILE:-}" ] && [ -f "$BROKER_LOG_FILE" ]; then
+            tail -300 "$BROKER_LOG_FILE"
+          fi
+
+      - name: Stop Workers broker
+        if: always()
+        run: |
+          if [ -n "${WRANGLER_PID:-}" ]; then
+            kill "$WRANGLER_PID" || true
+          fi
