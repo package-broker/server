@@ -13,7 +13,6 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { createJobProcessor, type Job } from '../jobs/processor';
 import type { StorageDriver } from '../storage/driver';
 import { isPackagistMirroringEnabled, isPackageCachingEnabled } from '../modules/admin';
-import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { nanoid } from 'nanoid';
 import { encryptCredentials } from '../utils/encryption';
 import { getLogger } from '../utils/logger';
@@ -316,15 +315,10 @@ export async function lazyLoadPackageFromRepositories(
   if (mirroringEnabled) {
     try {
       await ensurePackagistRepository(db, encryptionKey, kv || undefined);
-      const packagistUrl = `https://repo.packagist.org/p2/${packageName}.json`;
-      const response = await fetch(packagistUrl, {
-        headers: {
-          'User-Agent': COMPOSER_USER_AGENT,
-        },
-      });
-      
-      if (response.ok) {
-        const packageData = await response.json();
+      const { fetchFullPackageFromPackagist } = await import('../utils/upstream-fetch');
+      const packageData = await fetchFullPackageFromPackagist(packageName);
+
+      if (packageData) {
         return { packageData, repoId: 'packagist' };
       }
     } catch (error) {

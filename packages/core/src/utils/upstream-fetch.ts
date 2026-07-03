@@ -126,6 +126,10 @@ export async function fetchPackageFromUpstream(
   );
   
   const baseUrl = repo.url.replace(/\/$/, '');
+
+  if (baseUrl === 'https://repo.packagist.org') {
+    return fetchFullPackageFromPackagist(packageName);
+  }
   
   // First, get packages.json to understand repository structure
   const packagesJsonUrl = `${baseUrl}/packages.json`;
@@ -199,6 +203,42 @@ export async function fetchPackageFromUpstream(
   }
   
   return null;
+}
+
+export async function fetchFullPackageFromPackagist(
+  packageName: string
+): Promise<ProviderPackageResponse | null> {
+  const response = await pRetry(
+    () =>
+      fetch(`https://packagist.org/packages/${packageName}.json`, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': COMPOSER_USER_AGENT,
+        },
+      }),
+    { retries: 2 }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const packageData = await response.json() as {
+    package?: {
+      versions?: Record<string, ComposerPackage>;
+    };
+  };
+  const versions = packageData.package?.versions;
+
+  if (!versions || Object.keys(versions).length === 0) {
+    return null;
+  }
+
+  return {
+    packages: {
+      [packageName]: versions,
+    },
+  };
 }
 
 /**
