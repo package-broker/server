@@ -10,7 +10,6 @@ import { buildStorageKey, buildReadmeStorageKey, buildChangelogStorageKey } from
 import { downloadFromSource } from '../../utils/download';
 import { decryptCredentials } from '../../utils/encryption';
 import { nanoid } from 'nanoid';
-import { COMPOSER_USER_AGENT } from '@package-broker/shared';
 import { isPackagistMirroringEnabled } from '../admin';
 import { getLogger } from '../../utils/logger';
 import { extractReadme, extractChangelog } from '../../utils/zip-utils';
@@ -723,23 +722,23 @@ export async function addPackagesFromMirror(c: Context<PackagesRouteEnv>): Promi
     // Fetch each package from Packagist
     for (const packageName of body.package_names) {
       try {
-        const packagistUrl = `https://repo.packagist.org/p2/${packageName}.json`;
-        const response = await fetch(packagistUrl, {
-          headers: {
-            'User-Agent': COMPOSER_USER_AGENT,
+        const packageData = await fetchPackageFromUpstream(
+          {
+            id: 'packagist',
+            url: 'https://repo.packagist.org',
+            vcs_type: 'composer',
+            credential_type: 'none',
+            auth_credentials: '{}',
           },
-        });
+          packageName,
+          c.env.ENCRYPTION_KEY
+        );
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            results.push({ package: packageName, success: false, error: 'Package not found' });
-            continue;
-          }
-          results.push({ package: packageName, success: false, error: `HTTP ${response.status}` });
+        if (!packageData) {
+          results.push({ package: packageName, success: false, error: 'Package not found' });
           continue;
         }
 
-        const packageData: any = await response.json();
         const { transformPackageDistUrls } = await import('../composer');
         const { storedCount, errors } = await transformPackageDistUrls(packageData, 'packagist', baseUrl, db);
 
