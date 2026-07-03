@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/cli",
-  "version": "0.19.7",
+  "version": "0.19.8",
   "description": "CLI tool to initialize PACKAGE.broker configuration",
   "type": "module",
   "bin": {
@@ -20,7 +20,7 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@package-broker/main": "^0.19.7"
+    "@package-broker/main": "^0.19.8"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

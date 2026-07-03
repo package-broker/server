@@ -1,6 +1,6 @@
 {
   "name": "@package-broker/adapter-node",
-  "version": "0.19.7",
+  "version": "0.19.8",
   "type": "module",
   "keywords": [],
   "scripts": {
@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
-    "@package-broker/core": "^0.19.7",
-    "@package-broker/shared": "^0.19.7",
+    "@package-broker/core": "^0.19.8",
+    "@package-broker/shared": "^0.19.8",
     "better-sqlite3": "^12.5.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
