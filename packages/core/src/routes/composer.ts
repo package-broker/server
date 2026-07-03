@@ -348,14 +348,15 @@ export async function p2PackageRoute(c: Context<ComposerRouteEnv>): Promise<Resp
   const vendor = c.req.param('vendor');
   const packageFile = c.req.param('package');
   // Strip only the trailing extension - package names may contain ".json"
-  const packageName = `${vendor}/${packageFile?.replace(/\.json$/, '')}`;
+  const requestedPackageName = `${vendor}/${packageFile?.replace(/\.json$/, '')}`;
+  const packageName = requestedPackageName.replace(/~(?:dev|stable|alpha|beta|RC)$/, '');
 
   if (!vendor || !packageFile) {
     return c.json({ error: 'Bad Request', message: 'Invalid package name' }, 400);
   }
 
-  const kvKey = `p2:${packageName}`;
-  const metadataKey = `p2:${packageName}:metadata`;
+  const kvKey = `p2:${requestedPackageName}`;
+  const metadataKey = `p2:${requestedPackageName}:metadata`;
   const db = c.get('database');
   const requestUrl = new URL(c.req.url);
   const requestBaseUrl = `${requestUrl.protocol}//${requestUrl.host}`;
