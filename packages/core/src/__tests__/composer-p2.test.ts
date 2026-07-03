@@ -284,11 +284,10 @@ describe('Composer p2 Response Generation', () => {
       expect(version!.time).toBe('2019-06-18T21:01:42.000Z');
     });
 
-    it('should use version_normalized when stored in database', () => {
+    it('should expose Magento patch versions by display version only', () => {
       const packageName = 'magento/framework';
-      // Simulate a package stored with normalized version (as it would be after our fix)
       const mockPackages = [
-        createMockPackage(packageName, '103.0.7.0-patch8', {
+        createMockPackage(packageName, '103.0.7-p8', {
           version: '103.0.7-p8',
           version_normalized: '103.0.7.0-patch8',
           dist: {
@@ -296,9 +295,6 @@ describe('Composer p2 Response Generation', () => {
             url: 'https://example.com/framework.zip',
             reference: 'abc123',
           },
-        }, {
-          // Override version to be the normalized version (what gets stored)
-          version: '103.0.7.0-patch8',
         }),
       ];
 
@@ -309,18 +305,16 @@ describe('Composer p2 Response Generation', () => {
       expect(version).toBeDefined();
       expect(version!.version).toBe('103.0.7-p8');
       expect((version as any)!.version_normalized).toBe('103.0.7.0-patch8');
-      expect(alias).toBeDefined();
-      expect((alias as any)!.version_normalized).toBe('103.0.7.0-patch8');
+      expect(alias).toBeUndefined();
       // Original version should still be in metadata
       const metadata = JSON.parse(mockPackages[0].metadata!);
       expect(metadata.version).toBe('103.0.7-p8');
     });
 
-    it('should use version_normalized for elasticsearch package format', () => {
+    it('should expose v-prefixed versions by display version only', () => {
       const packageName = 'elasticsearch/elasticsearch';
-      // Simulate a package stored with normalized version
       const mockPackages = [
-        createMockPackage(packageName, '7.17.3.0', {
+        createMockPackage(packageName, 'v7.17.3', {
           version: 'v7.17.3',
           version_normalized: '7.17.3.0',
           dist: {
@@ -328,9 +322,6 @@ describe('Composer p2 Response Generation', () => {
             url: 'https://example.com/elasticsearch.zip',
             reference: 'def456',
           },
-        }, {
-          // Override version to be the normalized version
-          version: '7.17.3.0',
         }),
       ];
 
@@ -341,8 +332,7 @@ describe('Composer p2 Response Generation', () => {
       expect(version).toBeDefined();
       expect(version!.version).toBe('v7.17.3');
       expect((version as any)!.version_normalized).toBe('7.17.3.0');
-      expect(alias).toBeDefined();
-      expect((alias as any)!.version_normalized).toBe('7.17.3.0');
+      expect(alias).toBeUndefined();
       // Original version should still be in metadata
       const metadata = JSON.parse(mockPackages[0].metadata!);
       expect(metadata.version).toBe('v7.17.3');

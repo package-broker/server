@@ -821,14 +821,6 @@ export function buildP2Response(
     versionDataBase.dist = dist;
 
     versions.push(versionDataBase);
-
-    if (normalizedVersion && normalizedVersion !== displayVersion) {
-      versions.push({
-        ...versionDataBase,
-        version: normalizedVersion,
-        version_normalized: normalizedVersion,
-      });
-    }
   }
 
   return {
@@ -1206,16 +1198,6 @@ function transformDistUrlsInMemory(
 
       // Push to array (Composer 2 p2 format)
       result.packages[pkgName].push(versionData);
-
-      // Add normalized version alias if different from display version
-      // This allows constraints like "== 7.17.3.0" to match "v7.17.3"
-      if (normalizedVersion && normalizedVersion !== version) {
-        result.packages[pkgName].push({
-          ...versionData,
-          version: normalizedVersion,
-          version_normalized: normalizedVersion,
-        });
-      }
     }
   }
 
