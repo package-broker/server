@@ -25,6 +25,81 @@ vi.mock('../utils/analytics', () => ({
 }));
 
 describe('p2PackageRoute', () => {
+    it('normalizes Composer stability suffixes before package lookup', async () => {
+        const packageRow = {
+            id: 'pkg1',
+            repo_id: 'repo1',
+            name: 'magento/product-community-edition',
+            version: '2.4.7-p10',
+            dist_url: '/dist/repo1/magento/product-community-edition/2.4.7-p10.zip',
+            source_dist_url: 'https://repo.magento.com/archives/magento/product-community-edition.zip',
+            dist_reference: 'ref',
+            description: null,
+            license: null,
+            package_type: null,
+            homepage: null,
+            released_at: 1700000000,
+            readme_content: null,
+            metadata: JSON.stringify({
+                name: 'magento/product-community-edition',
+                version: '2.4.7-p10',
+                dist: { type: 'zip', url: 'https://repo.magento.com/archives/magento/product-community-edition.zip' },
+            }),
+            created_at: 1700000000,
+        };
+
+        const where = vi.fn().mockResolvedValue([packageRow]);
+        const mockKv = {
+            get: vi.fn().mockResolvedValue(null),
+            put: vi.fn().mockResolvedValue(undefined),
+            delete: vi.fn().mockResolvedValue(undefined),
+        };
+
+        const mockContext = {
+            req: {
+                param: (key: string) => {
+                    if (key === 'vendor') return 'magento';
+                    if (key === 'package') return 'product-community-edition~dev.json';
+                    return undefined;
+                },
+                header: () => undefined,
+                url: 'http://localhost/p2/magento/product-community-edition~dev.json',
+            },
+            env: {
+                KV: mockKv,
+                DB: {},
+                ENCRYPTION_KEY: 'key',
+            },
+            executionCtx: {
+                waitUntil: vi.fn(),
+            },
+            get: (key: string) => {
+                if (key === 'database') {
+                    return {
+                        select: vi.fn().mockReturnValue({
+                            from: vi.fn().mockReturnValue({ where }),
+                        }),
+                    };
+                }
+                if (key === 'requestId') return 'req-123';
+                return undefined;
+            },
+            json: vi.fn((data, status) => new Response(JSON.stringify(data), { status })),
+        } as unknown as Context;
+
+        const response = await p2PackageRoute(mockContext);
+        const body = await response.json() as any;
+
+        expect(response.status).toBe(200);
+        expect(body.packages['magento/product-community-edition']).toBeDefined();
+        expect(body.packages['magento/product-community-edition~dev']).toBeUndefined();
+        expect(mockKv.put).toHaveBeenCalledWith(
+            'p2:magento/product-community-edition~dev',
+            expect.any(String),
+            expect.any(Object)
+        );
+    });
+
     it('should handle double-encoded string in KV cache gracefully', async () => {
         // Scenario: KV contains a JSON string that evaluates to a STRING, not an object/array.
         // This causes "foreach() argument must be of type array|object, string given" in Composer.
