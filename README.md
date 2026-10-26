@@ -1,5 +1,8 @@
 # PACKAGE.broker Server
 
+> [!WARNING]
+> PACKAGE.broker 1.x is end of life and receives no fixes, including security fixes. This repository is kept read-only for reference. Package Broker 2.0 lives in [package-broker/broker](https://github.com/package-broker/broker); start at [package.broker](https://package.broker). The `@package-broker/*` 0.x packages on npm belong to 1.x.
+
 [![CI](https://github.com/package-broker/server/actions/workflows/ci.yml/badge.svg)](https://github.com/package-broker/server/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
